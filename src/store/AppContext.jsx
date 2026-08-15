@@ -10,6 +10,9 @@ import {
   streakOf, isComeback, lastMilestoneHit, familyStreakTotal,
   XP_PER_DAY, XP_COMEBACK, XP_PER_CHEER, CHEERS_PER_DAY, cheersGivenToday, hasCheered,
 } from '../lib/records.js'
+import {
+  buildCard, cardFor, weekStartOf, completedLines, isBlackout, REWARDS,
+} from '../lib/bingo.js'
 
 const Ctx = createContext(null)
 export const useApp = () => useContext(Ctx)
@@ -41,7 +44,10 @@ export function AppProvider({ children }) {
   // Landmines keep escalating while the app is closed, so catch up on mount and
   // whenever the tab comes back into focus, then keep ticking once a minute.
   const tickRef = useRef(null)
-  tickRef.current = () => api.tickLandmines()
+  tickRef.current = () => {
+    api.tickLandmines()
+    api.ensureBingoCards()
+  }
 
   useEffect(() => {
     if (!ready) return
@@ -86,8 +92,8 @@ export function AppProvider({ children }) {
    * member's points go to escrow instead of vanishing. Personal-development
    * recognition always lands — only the points wait.
    */
-  function awardXp(draft, memberId, amount) {
-    if (!amount || amount <= 0) return
+  function awardXp(draft, memberId, amount, coins = 0) {
+    if ((!amount || amount <= 0) && !coins) return
     const member = draft.members.find((m) => m.id === memberId)
     if (!member) return
 
@@ -95,16 +101,73 @@ export function AppProvider({ children }) {
       (lm) => lm.status === 'armed' && lm.ownerId === memberId && !lm.disputed,
     )
     if (frozen) {
-      member.escrowXp = (member.escrowXp || 0) + amount
+      member.escrowXp = (member.escrowXp || 0) + Math.max(0, amount)
+      member.escrowCoins = (member.escrowCoins || 0) + coins
       return
     }
 
-    member.xp += amount
+    member.xp += Math.max(0, amount)
+    member.coins += coins
     draft.familyGoals.forEach((g) => {
       if (g.achievedAt) return
-      g.progress = Math.min(g.target, g.progress + amount)
+      g.progress = Math.min(g.target, g.progress + Math.max(0, amount))
       if (g.progress >= g.target) g.achievedAt = Date.now()
     })
+  }
+
+  /**
+   * Pay out any bingo lines this card has just completed.
+   * `linesAwarded` is permanent, so unmarking a square can't re-sell a line.
+   */
+  function settleBingo(draft, card, memberId) {
+    const fresh = completedLines(card).filter((l) => !card.linesAwarded.includes(l.key))
+    let result = null
+
+    if (fresh.length) {
+      card.linesAwarded.push(...fresh.map((l) => l.key))
+      const pts = REWARDS.linePoints * fresh.length
+      const coins = REWARDS.lineCoins * fresh.length
+      awardXp(draft, memberId, pts, coins)
+      logActivity(draft, memberId, `got bingo — ${fresh.length} line${fresh.length > 1 ? 's' : ''}`, '🎱')
+      result = { lines: fresh.length, pts, coins, blackout: false }
+    }
+
+    if (isBlackout(card) && !card.blackoutAwarded) {
+      card.blackoutAwarded = true
+      awardXp(draft, memberId, REWARDS.blackoutPoints, REWARDS.blackoutCoins)
+      logActivity(draft, memberId, 'blacked out the whole bingo card', '🏆')
+      result = {
+        lines: result?.lines || 0,
+        pts: (result?.pts || 0) + REWARDS.blackoutPoints,
+        coins: (result?.coins || 0) + REWARDS.blackoutCoins,
+        blackout: true,
+      }
+    }
+
+    return result
+  }
+
+  /**
+   * Tick off any square matching `matcher` on this week's card. Called from the
+   * rest of the app so ordinary progress fills the board on its own.
+   */
+  function markBingo(draft, memberId, matcher) {
+    const week = weekStartOf()
+    const card = (draft.bingoCards || []).find(
+      (c) => c.memberId === memberId && c.weekStartISO === week,
+    )
+    if (!card) return null
+
+    let changed = false
+    card.squares.forEach((sq) => {
+      if (!sq.marked && matcher(sq)) {
+        sq.marked = true
+        sq.markedAt = Date.now()
+        changed = true
+      }
+    })
+    if (!changed) return null
+    return settleBingo(draft, card, memberId)
   }
 
   /* ───────────────────────── members / session ───────────────────────── */
@@ -374,6 +437,8 @@ export function AppProvider({ children }) {
         ? m.streak
         : m.lastDoneISO === addDays(t, -1) ? m.streak + 1 : 1
 
+      let bingoResult = null
+
       // Frozen earnings go to escrow instead of the balance.
       const paidXp = frozen ? 0 : gained
       const paidCoins = frozen ? 0 : s.coins
@@ -481,6 +546,13 @@ export function AppProvider({ children }) {
           frozen ? `banked ${gained} pts for ${title || 'a task'} (frozen)` : `earned ${gained} pts for ${title || 'a task'}`,
           frozen ? '🧊' : '⭐',
         )
+
+        // Ordinary progress fills the bingo card without anyone tapping anything.
+        bingoResult = markBingo(d, mem.id, (sq) =>
+          (sq.kind === 'chore' && sub.kind === 'chore' && sq.choreId === sub.targetId) ||
+          (sq.kind === 'job' && sub.kind === 'job') ||
+          (sq.kind === 'landmine' && sub.kind === 'landmine'),
+        )
       })
 
       const payload = {
@@ -520,6 +592,18 @@ export function AppProvider({ children }) {
           goal: payload.goalHit,
         })
       }
+      // The approval celebration owns the screen, so bingo speaks up via a toast.
+      if (bingoResult) {
+        setTimeout(() => {
+          notify(
+            bingoResult.blackout
+              ? `BLACKOUT! +${bingoResult.pts} pts, ${bingoResult.coins} 🪙`
+              : `BINGO — ${bingoResult.lines} line${bingoResult.lines > 1 ? 's' : ''}! +${bingoResult.pts} pts`,
+            bingoResult.blackout ? '🏆' : '🎱',
+          )
+        }, 1200)
+      }
+
       return payload
     },
 
@@ -604,6 +688,65 @@ export function AppProvider({ children }) {
 
     removeFamilyGoal(id) {
       update((d) => { d.familyGoals = d.familyGoals.filter((g) => g.id !== id) })
+    },
+
+    /* ───────────────────────── 🎱 chore bingo ───────────────────────── */
+
+    /**
+     * Deal this week's cards. Done for everyone at boot rather than lazily on
+     * first view — otherwise a chore approved before a kid opens their card has
+     * nothing to mark, and the square silently never ticks.
+     */
+    ensureBingoCards() {
+      const week = weekStartOf()
+      const missing = state.members.filter((m) => !cardFor(state, m.id, week))
+      if (!missing.length) return
+      update((d) => {
+        for (const m of d.members) {
+          if (d.bingoCards.some((c) => c.memberId === m.id && c.weekStartISO === week)) continue
+          d.bingoCards.push(buildCard(d, m.id, week))
+        }
+        // Keep a few weeks of history, not a year of it.
+        d.bingoCards = d.bingoCards.slice(-28)
+      })
+    },
+
+    /** Manual tick for the one-off squares. Tapping again unmarks it. */
+    toggleBingoSquare(memberId, index) {
+      const week = weekStartOf()
+      let result = null
+      update((d) => {
+        const card = d.bingoCards.find((c) => c.memberId === memberId && c.weekStartISO === week)
+        const sq = card?.squares[index]
+        if (!card || !sq || sq.kind === 'free') return
+        // Auto-marked squares are earned elsewhere — don't let a tap undo them.
+        if (sq.marked && sq.kind !== 'task') return
+
+        sq.marked = !sq.marked
+        sq.markedAt = sq.marked ? Date.now() : null
+        if (sq.marked) result = settleBingo(d, card, memberId)
+      })
+
+      if (result) {
+        celebrate({
+          emoji: result.blackout ? '🏆' : '🎱',
+          title: result.blackout ? 'BLACKOUT!' : result.lines > 1 ? `${result.lines} lines at once!` : 'BINGO!',
+          subtitle: result.blackout
+            ? `The entire card. +${result.pts} points and ${result.coins} 🪙.`
+            : `+${result.pts} points and ${result.coins} 🪙.`,
+          color: state.members.find((m) => m.id === memberId)?.color,
+        })
+      }
+      return result
+    },
+
+    newBingoCard(memberId) {
+      const week = weekStartOf()
+      update((d) => {
+        d.bingoCards = d.bingoCards.filter((c) => !(c.memberId === memberId && c.weekStartISO === week))
+        d.bingoCards.push(buildCard(d, memberId, week))
+      })
+      notify('Fresh card dealt', '🎱')
     },
 
     /* ───────────────────────── 🏅 personal records ───────────────────────── */
@@ -704,6 +847,8 @@ export function AppProvider({ children }) {
           logActivity(d, mem.id, `got straight back on “${t.title}”`, '💪')
         }
 
+        if (isPr) markBingo(d, mem.id, (sq) => sq.kind === 'record')
+
         // The household record — everyone's live streaks added together.
         const nowFamily = familyStreakTotal(d, today)
         d.familyRecord = d.familyRecord || { best: 0, bestAt: null }
@@ -747,6 +892,7 @@ export function AppProvider({ children }) {
         if (!p || p.cheers.some((c) => c.memberId === memberId)) return
         p.cheers.push({ memberId, at: Date.now(), dateISO: todayISO() })
         awardXp(d, memberId, XP_PER_CHEER)
+        markBingo(d, memberId, (sq) => sq.kind === 'cheer')
       })
       notify('Cheered 📣', '📣')
       return true

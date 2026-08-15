@@ -10,6 +10,7 @@ function migrate(state) {
   const s = { ...state }
 
   s.landmines = Array.isArray(s.landmines) ? s.landmines : []
+  s.bingoCards = Array.isArray(s.bingoCards) ? s.bingoCards : []
   s.tracks = Array.isArray(s.tracks) ? s.tracks : []
   s.prs = Array.isArray(s.prs) ? s.prs : []
   s.familyRecord = s.familyRecord || { best: 0, bestAt: null }

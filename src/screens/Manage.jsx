@@ -379,7 +379,14 @@ function AiTab() {
 
       <div className="card" style={{ marginBottom: 12 }}>
         <div className="tiny" style={{ marginBottom: 8 }}>2 · THE SUBMISSION</div>
-        <CameraCapture value={shot} onChange={setShot} compact hint="What they'd send in" />
+        <CameraCapture
+          value={shot}
+          onChange={setShot}
+          compact
+          hint="What they'd send in"
+          ghost={ref}
+          ghostLabel="the standard"
+        />
       </div>
 
       <button className="btn go xl wide" disabled={!ref || !shot || busy} onClick={run}>

@@ -95,7 +95,13 @@ export default function DefuseSheet({ open, onClose, mine, member }) {
             </div>
           )}
 
-          <CameraCapture value={photo} onChange={setPhoto} hint="Same spot as the original photo" />
+          <CameraCapture
+            value={photo}
+            onChange={setPhoto}
+            hint="Same spot as the original photo"
+            ghost={before}
+            ghostLabel="the crime scene"
+          />
 
           <button className="btn go xl wide" style={{ marginTop: 14 }} disabled={!photo} onClick={run}>
             🤖 Check my work

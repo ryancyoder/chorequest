@@ -255,10 +255,14 @@ function QuickAddJob({ open, onClose, app }) {
           <p className="muted" style={{ marginTop: 0 }}>
             Add a photo of what done should look like and the AI will check their proof against it.
           </p>
-          {standard
-            ? <div className="camwrap" style={{ marginBottom: 8 }}><img src={standard} alt="Standard" /></div>
-            : null}
-          <CameraCapture value={standard} onChange={setStandard} compact hint="What done looks like" />
+          <CameraCapture
+            value={standard}
+            onChange={setStandard}
+            compact
+            hint="What done looks like"
+            ghost={photo}
+            ghostLabel="the mess you just shot"
+          />
           <button className="btn primary xl wide" style={{ marginTop: 14 }} onClick={() => setStep(1)}>Next</button>
         </>
       )}

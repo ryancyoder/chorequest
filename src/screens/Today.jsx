@@ -3,6 +3,7 @@ import { useApp } from '../store/AppContext.jsx'
 import { Ring, Empty, Sheet } from '../components/ui.jsx'
 import ProofSheet from '../components/ProofSheet.jsx'
 import CheckInCard from '../components/CheckInCard.jsx'
+import BingoCard from '../components/BingoCard.jsx'
 import {
   choresOn, choreSubmission, eventsOn, dayStats, memberProgress,
   STATUS_META, jobsFor, jobSubmission, pendingApprovals,
@@ -96,13 +97,14 @@ export default function Today({ go }) {
       {app.layout === 'tablet' ? (
         <div className="cols">
           <div className="col">{sections.chores}{sections.records}</div>
-          <div className="col">{sections.schedule}{sections.duties}{sections.jobs}</div>
+          <div className="col">{sections.schedule}{sections.duties}{sections.bingo}{sections.jobs}</div>
         </div>
       ) : (
         <>
           {sections.schedule}
           {sections.duties}
           {sections.chores}
+          {sections.bingo}
           {sections.records}
           {sections.jobs}
         </>
@@ -208,6 +210,8 @@ function buildSections({ app, state, me, date, stats, chores, grouped, events, m
     ),
 
     records: <CheckInCard member={me} />,
+
+    bingo: <BingoCard member={me} />,
 
     away: awayEventOn(state, me.id, date) && (
       <div className="card glow" style={{ marginTop: 12 }}>

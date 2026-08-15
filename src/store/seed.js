@@ -161,6 +161,7 @@ export function buildSeed() {
       { id: 'pr2', memberId: 'm4', trackId: 't3', title: 'No snapping when I get frustrated', emoji: '😤', kind: 'vice', value: 3, comeback: true, at: Date.now() - 30 * 3600e3, cheers: [] },
     ],
     familyRecord: { best: 54, bestAt: Date.now() - 4 * 86400e3 },
+    bingoCards: [], // dealt on demand, first time someone opens their card
 
     // One live example, still inside its grace period so nothing is on fire yet
     // and nobody has owned up to it. Tap it to see the whole mechanic.

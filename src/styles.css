@@ -355,6 +355,36 @@ label.field > span { display: block; font-size: 12px; font-weight: 800; text-tra
 .shutter i { width: 52px; height: 52px; border-radius: 99px; background: linear-gradient(135deg, #ff4fd8, #a06cff); display: block; }
 .shutter:active { transform: scale(.92); }
 
+/* ── ghost overlay: line the shot up with the original ── */
+.camwrap .ghost {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; pointer-events: none;
+}
+/* 'difference' blends the two so any misalignment glows and a perfect
+   match goes black — surprisingly easy to aim with. */
+.camwrap .ghost.diff { mix-blend-mode: difference; }
+.camwrap.diffmode { background: #000; }
+
+.camgrid { position: absolute; inset: 0; pointer-events: none; }
+.camgrid i {
+  position: absolute; background: rgba(255,255,255,.35);
+}
+.camgrid i:nth-child(1) { left: 33.33%; top: 0; bottom: 0; width: 1px; }
+.camgrid i:nth-child(2) { left: 66.66%; top: 0; bottom: 0; width: 1px; }
+.camgrid i:nth-child(3) { top: 33.33%; left: 0; right: 0; height: 1px; }
+.camgrid i:nth-child(4) { top: 66.66%; left: 0; right: 0; height: 1px; }
+
+.ghostbar { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.ghostslider { display: flex; align-items: center; gap: 10px; }
+.ghostslider input[type=range] {
+  flex: 1; appearance: none; height: 5px; padding: 0; border: none;
+  border-radius: 99px; background: linear-gradient(90deg, var(--line), var(--member));
+}
+.ghostslider input[type=range]::-webkit-slider-thumb {
+  appearance: none; width: 20px; height: 20px; border-radius: 99px;
+  background: #fff; box-shadow: 0 2px 8px #0008; cursor: pointer;
+}
+
 .photo-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .photo-pair figure { margin: 0; }
 .photo-pair img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 14px; border: 1px solid var(--line); display: block; }
@@ -561,6 +591,56 @@ label.field > span { display: block; font-size: 12px; font-weight: 800; text-tra
 @keyframes micpulse {
   0%, 100% { box-shadow: 0 0 0 0 #ff5c6c88; }
   50% { box-shadow: 0 0 0 14px #ff5c6c00; }
+}
+
+/* ═══════════════════════ 🎱 chore bingo ═══════════════════════ */
+
+.bingostrip { border-left: 4px solid var(--gold); }
+
+.minigrid {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px;
+  width: 46px; flex: 0 0 auto;
+}
+.minigrid span {
+  aspect-ratio: 1; border-radius: 2px; background: rgba(255,255,255,.11);
+}
+.minigrid span.on { background: var(--gold); box-shadow: 0 0 4px #ffd60a88; }
+
+.bingogrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.bsq {
+  position: relative; aspect-ratio: 1; border-radius: 10px; padding: 4px 3px;
+  background: var(--card); border: 1px solid var(--line);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  text-align: center; overflow: hidden; transition: .16s;
+}
+.bsq .e { font-size: 15px; line-height: 1; }
+.bsq .t {
+  font-size: 7.5px; font-weight: 700; line-height: 1.15; color: var(--ink-dim);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.bsq.tappable { cursor: pointer; }
+.bsq.tappable:active { transform: scale(.93); }
+.bsq.marked {
+  background: linear-gradient(150deg, #63e6a52e, rgba(0,0,0,.25));
+  border-color: #63e6a577;
+}
+.bsq.marked .t { color: var(--ink); }
+.bsq.free { background: linear-gradient(150deg, #ffd60a33, rgba(0,0,0,.25)); border-color: #ffd60a77; }
+.bsq.nearline { border-color: #ffd60a99; box-shadow: inset 0 0 12px #ffd60a1f; }
+.bsq.winline {
+  background: linear-gradient(150deg, #ffd60a3d, #ff8a0026);
+  border-color: var(--gold);
+  box-shadow: 0 0 12px #ffd60a55;
+  animation: winpulse 2.4s ease-in-out infinite;
+}
+@keyframes winpulse { 50% { box-shadow: 0 0 20px #ffd60a88; } }
+.bsq .stamp {
+  position: absolute; top: 2px; right: 4px; font-size: 10px; color: var(--good); font-weight: 900;
+}
+
+@media (min-width: 520px) {
+  .bsq .t { font-size: 9px; }
+  .bsq .e { font-size: 19px; }
 }
 
 /* ═══════════════════════ 🗓️ month view ═══════════════════════ */

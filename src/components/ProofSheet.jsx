@@ -98,7 +98,13 @@ export default function ProofSheet({ open, onClose, kind, target, member, dateIS
             </div>
           )}
 
-          <CameraCapture value={photo} onChange={setPhoto} hint="Match the angle of the example photo" />
+          <CameraCapture
+            value={photo}
+            onChange={setPhoto}
+            hint="Match the angle of the example photo"
+            ghost={reference}
+            ghostLabel="the finished photo"
+          />
 
           <label className="field" style={{ marginTop: 14 }}>
             <span>Anything to add? (optional)</span>
