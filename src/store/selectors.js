@@ -49,12 +49,56 @@ export function pendingApprovals(state) {
 
 export function submissionTitle(state, sub) {
   if (sub.kind === 'chore') return byId(state.chores, sub.targetId)?.title || 'Chore'
+  if (sub.kind === 'landmine') return byId(state.landmines, sub.targetId)?.title || 'Landmine'
   return byId(state.jobs, sub.targetId)?.title || 'Job'
 }
 
 export function submissionEmoji(state, sub) {
   if (sub.kind === 'chore') return byId(state.chores, sub.targetId)?.emoji || '🧹'
+  if (sub.kind === 'landmine') return '💣'
   return '🎯'
+}
+
+/* ─────────────────────────── landmines ─────────────────────────── */
+
+/** Mines still causing trouble — armed, or waiting on a defuse review. */
+export function liveLandmines(state) {
+  return (state.landmines || [])
+    .filter((m) => m.status === 'armed' || m.status === 'defusing')
+    .sort((a, b) => a.armedAt - b.armedAt)
+}
+
+export function armedLandmines(state) {
+  return (state.landmines || []).filter((m) => m.status === 'armed')
+}
+
+/** The mine currently freezing this member's earnings, if any. */
+export function freezingMine(state, memberId) {
+  return (state.landmines || []).find(
+    (m) => m.status === 'armed' && m.ownerId === memberId && !m.disputed,
+  ) || null
+}
+
+export function isFrozen(state, memberId) {
+  return !!freezingMine(state, memberId)
+}
+
+export function unclaimedLandmines(state) {
+  return armedLandmines(state).filter((m) => !m.ownerId)
+}
+
+export function disputedLandmines(state) {
+  return armedLandmines(state).filter((m) => m.disputed)
+}
+
+export function totalPot(state) {
+  return liveLandmines(state).reduce((n, m) => n + (m.pot || 0), 0)
+}
+
+export function landmineSubmission(state, mineId) {
+  return state.submissions
+    .filter((s) => s.kind === 'landmine' && s.targetId === mineId)
+    .sort((a, b) => b.createdAt - a.createdAt)[0] || null
 }
 
 /** Per-member day summary used all over the UI. */

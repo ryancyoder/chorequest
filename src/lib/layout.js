@@ -22,10 +22,21 @@ export function useWideViewport() {
 
   useEffect(() => {
     const mq = window.matchMedia(query)
-    const onChange = (e) => setWide(e.matches)
-    mq.addEventListener('change', onChange)
-    setWide(mq.matches)
-    return () => mq.removeEventListener('change', onChange)
+    const sync = () => setWide(mq.matches)
+
+    // Rotating an iPad doesn't reliably deliver a matchMedia 'change' on every
+    // platform, so watch resize/orientation as well and re-read the query. All
+    // three collapse to the same setState, and React skips identical values.
+    mq.addEventListener('change', sync)
+    window.addEventListener('resize', sync)
+    window.addEventListener('orientationchange', sync)
+    sync()
+
+    return () => {
+      mq.removeEventListener('change', sync)
+      window.removeEventListener('resize', sync)
+      window.removeEventListener('orientationchange', sync)
+    }
   }, [query])
 
   return wide

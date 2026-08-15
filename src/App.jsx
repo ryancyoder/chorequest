@@ -12,11 +12,15 @@ import Rewards from './screens/Rewards.jsx'
 import Family from './screens/Family.jsx'
 import Review from './screens/Review.jsx'
 import Manage from './screens/Manage.jsx'
+import Landmines from './screens/Landmines.jsx'
+import LandmineBanner from './components/LandmineBanner.jsx'
+import { liveLandmines } from './store/selectors.js'
 
 const TABS = [
   { key: 'today', icon: '🏠', label: 'Today' },
   { key: 'schedule', icon: '📅', label: 'Schedule' },
   { key: 'jobs', icon: '🎯', label: 'Jobs' },
+  { key: 'mines', icon: '💣', label: 'Mines' },
   { key: 'rewards', icon: '🎁', label: 'Rewards' },
   { key: 'family', icon: '🏆', label: 'Family' },
 ]
@@ -48,11 +52,14 @@ export default function App() {
     today: <Today go={setTab} />,
     schedule: <Schedule />,
     jobs: <Jobs />,
+    mines: <Landmines />,
     rewards: <Rewards />,
     family: <Family go={setTab} />,
     review: <Review />,
     manage: <Manage />,
   }
+
+  const mineCount = liveLandmines(app.state).length
 
   return (
     <div className={`app ${tablet ? 'tablet' : 'phone'}`} style={{ '--member': me.color }}>
@@ -64,6 +71,7 @@ export default function App() {
 
       <main className="content">
         {tablet && <TabletHeader tab={tab} me={me} app={app} queue={queue} setTab={setTab} />}
+        {tab !== 'mines' && <LandmineBanner onOpen={() => setTab('mines')} />}
         {screens[tab]}
       </main>
 
@@ -76,6 +84,7 @@ export default function App() {
               {t.key === 'family' && app.isParentMode && queue.length > 0 && (
                 <span className="dotbadge">{queue.length}</span>
               )}
+              {t.key === 'mines' && mineCount > 0 && <span className="dotbadge">{mineCount}</span>}
             </button>
           ))}
         </nav>
@@ -139,7 +148,8 @@ function PhoneBar({ tab, setTab, queue, app, me }) {
 /* ─────────────────────────── tablet chrome ─────────────────────────── */
 
 function Rail({ tab, setTab, queue, app, me }) {
-  const items = [...TABS]
+  const mineCount = liveLandmines(app.state).length
+  const items = TABS.map((t) => (t.key === 'mines' ? { ...t, label: 'Landmines', badge: mineCount } : t))
   if (app.isParentMode) items.push({ key: 'review', icon: '📋', label: 'Review', badge: queue.length })
 
   return (

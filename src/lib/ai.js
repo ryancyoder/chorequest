@@ -238,6 +238,81 @@ async function localCheck({ referencePhoto, submittedPhoto, title = 'this job', 
 }
 
 /**
+ * Landmine defusal — the same machinery, run backwards.
+ *
+ * For a chore we ask "does this look like the finished standard?". For a mess
+ * there is no standard, only a photo of the disaster. So we ask the opposite:
+ * "is this meaningfully different from the mess?"
+ *
+ *   • Nearly identical  → nothing was cleaned. Rejected, with attitude.
+ *   • Somewhat changed  → plausible cleanup, goes to a parent.
+ *   • Nothing in common → suspicious; probably a photo of a different room.
+ *     Still forwarded, but flagged so the reviewing parent knows to look twice.
+ *
+ * A human always makes the final call, which is what keeps this honest — the
+ * heuristic only has to be good enough to stop the lazy "same pile, new angle"
+ * attempt, and it is.
+ */
+export async function checkDefusePhoto({ messPhoto, defusePhoto, title = 'this mess' }) {
+  if (!messPhoto) {
+    return {
+      pass: true, score: null, skipped: true,
+      headline: 'No before photo on file',
+      detail: `There's no photo of ${title} to compare against, so a parent will judge this one directly.`,
+      regions: [], signals: [], checklist: [], backend: AI_BACKEND,
+    }
+  }
+
+  const [before, after] = await Promise.all([fingerprint(messPhoto), fingerprint(defusePhoto)])
+
+  const structural = structuralScore(before.gray, after.gray)
+  const gradient = gradientScore(before.gray, after.gray)
+  const color = colorScore(before.rgb, after.rgb)
+  const regions = regionScores(before.gray, after.gray)
+
+  const sameness = Math.round(
+    Math.max(0, Math.min(100, ((0.45 * structural + 0.35 * gradient + 0.20 * color) - 0.35) / 0.6 * 100)),
+  )
+  // Score here means "how much changed", the inverse of the chore check.
+  const score = 100 - sameness
+
+  const signals = [
+    { label: 'Scene changed', value: score },
+    { label: 'Clutter shifted', value: Math.round((1 - color) * 100) },
+    { label: 'Edges redrawn', value: Math.round((1 - gradient) * 100) },
+  ]
+
+  const changed = regions.filter((r) => r.score < 60).map((r) => r.name)
+
+  if (sameness >= 88) {
+    return {
+      pass: false, score,
+      headline: 'That is the same mess',
+      detail: 'This is essentially the identical photo — same pile, possibly a new angle. Bold move. Clean it for real and try again.',
+      regions, signals, checklist: [], backend: AI_BACKEND, sameShot: true,
+    }
+  }
+
+  if (sameness <= 12) {
+    return {
+      pass: true, score,
+      headline: 'Whoa — completely different scene',
+      detail: 'Almost nothing here matches the original photo. That might mean a heroic cleanup, or it might mean this is a photo of somewhere else entirely. Flagged for a parent to check.',
+      regions, signals, checklist: [], backend: AI_BACKEND, suspicious: true,
+    }
+  }
+
+  return {
+    pass: true, score,
+    headline: score >= 60 ? 'That looks cleaned up' : 'Something definitely changed',
+    detail: changed.length
+      ? `The ${changed.slice(0, 2).join(' and ')} changed the most. Sent to a parent to confirm and release the pot.`
+      : 'The scene has clearly changed since the mine was armed. Sent to a parent to confirm and release the pot.',
+    regions, signals, checklist: [], backend: AI_BACKEND,
+  }
+}
+
+/**
  * Real multimodal check. Wire this to a server route that holds the API key.
  * Kept here so the swap is a one-line change to AI_BACKEND above.
  */

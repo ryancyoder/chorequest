@@ -195,6 +195,7 @@ label.field > span { display: block; font-size: 12px; font-weight: 800; text-tra
   background: rgba(0,0,0,.3); border: 1px solid var(--line);
   border-radius: 99px; padding: 6px 11px; font-size: 13px; font-weight: 800;
 }
+.pill { white-space: nowrap; }
 .pill small { font-weight: 700; color: var(--ink-dim); font-size: 11px; }
 .pill.fire { border-color: #ff8a0055; background: linear-gradient(90deg, #ff8a0033, #ff2e0022); }
 .pill.coin { border-color: #ffd60a55; background: linear-gradient(90deg, #ffd60a2b, transparent); }
@@ -560,6 +561,66 @@ label.field > span { display: block; font-size: 12px; font-weight: 800; text-tra
 @keyframes micpulse {
   0%, 100% { box-shadow: 0 0 0 0 #ff5c6c88; }
   50% { box-shadow: 0 0 0 14px #ff5c6c00; }
+}
+
+/* ═══════════════════════ 💣 landmines ═══════════════════════ */
+
+.minebanner {
+  display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
+  padding: 11px 13px; margin: 4px 0 12px; border-radius: var(--r-md);
+  border: 1px solid #ff5c6c66;
+  background: linear-gradient(100deg, #ff5c6c26, #ff8a0014 60%, transparent);
+  animation: alarm 2.6s ease-in-out infinite;
+}
+.minebanner.smoking, .minebanner.detonated {
+  border-color: #ff2e2e88;
+  background: linear-gradient(100deg, #ff2e2e33, #ff8a0020 60%, transparent);
+  animation: alarm 1.3s ease-in-out infinite;
+}
+@keyframes alarm {
+  0%, 100% { box-shadow: 0 0 0 0 #ff5c6c00; }
+  50% { box-shadow: 0 0 22px 0 #ff5c6c44; }
+}
+.minebanner .siren { font-size: 24px; animation: shake 3.2s ease-in-out infinite; }
+@keyframes shake {
+  0%, 88%, 100% { transform: rotate(0); }
+  91% { transform: rotate(-14deg); }
+  94% { transform: rotate(12deg); }
+  97% { transform: rotate(-6deg); }
+}
+.minebanner b { display: block; font-size: 14px; line-height: 1.25; }
+.minebanner .sub { display: block; font-size: 11px; font-weight: 700; color: var(--ink-dim); margin-top: 2px; }
+.minebanner .chev { font-size: 20px; color: var(--ink-faint); }
+
+.mine { border-left: 4px solid var(--warn); }
+.mine.ticking { border-left-color: #ff8a00; }
+.mine.smoking { border-left-color: #ff5c6c; background: linear-gradient(120deg, #ff5c6c14, var(--card)); }
+.mine.detonated {
+  border-left-color: #ff2020;
+  background: linear-gradient(120deg, #ff20201f, var(--card));
+  box-shadow: 0 0 26px #ff20201f;
+}
+.mine.settling { opacity: .72; border-left-color: var(--accent-2); }
+
+.minepic {
+  width: 74px; height: 74px; border-radius: 14px; object-fit: cover; flex: 0 0 auto;
+  border: 1px solid var(--line);
+}
+.minepic.placeholder {
+  display: grid; place-items: center; font-size: 30px;
+  background: rgba(0,0,0,.3);
+}
+
+.fuse { margin-top: 9px; }
+.fusebar {
+  height: 6px; border-radius: 99px; background: rgba(0,0,0,.42); overflow: hidden;
+  border: 1px solid rgba(255,255,255,.07);
+}
+.fusebar > i {
+  display: block; height: 100%; border-radius: 99px;
+  background: linear-gradient(90deg, #ffd60a, #ff8a00, #ff2020);
+  box-shadow: 0 0 12px #ff8a0088;
+  transition: width 1s linear;
 }
 
 /* ═══════════════════════ tablet / iPad landscape ═══════════════════════ */

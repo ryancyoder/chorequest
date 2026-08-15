@@ -1,5 +1,6 @@
 import { todayISO, addDays } from '../lib/date.js'
 import { earnedBadges, levelFromXp } from '../lib/gamify.js'
+import { DEFAULT_RATES } from '../lib/landmines.js'
 
 const id = (p, n) => `${p}_${n}`
 
@@ -107,6 +108,30 @@ export function buildSeed() {
     jobs,
     prizes,
     familyGoals,
+    // One live example, still inside its grace period so nothing is on fire yet
+    // and nobody has owned up to it. Tap it to see the whole mechanic.
+    landmines: [
+      {
+        id: 'lm_demo',
+        title: 'Cereal bowl situation on the couch',
+        notes: 'Bowl, spoon, and what appears to be a milk ring. Nobody nearby. Nobody responsible, apparently.',
+        photoId: null,
+        location: 'Living room',
+        ownerId: null,
+        reporterId: 'm2',
+        armedAt: Date.now() - 18 * 60000,
+        status: 'armed',
+        pot: 0,
+        appliedDrain: 0,
+        appliedFine: 0,
+        streakBurned: false,
+        disputed: false,
+        stageAtDispute: null,
+        confessed: false,
+        clearedBy: null,
+        clearedAt: null,
+      },
+    ],
     submissions: [],
     activity: [
       { id: 'a1', at: Date.now() - 3600e3, memberId: 'm5', text: 'earned 15 pts for Wipe down the table', emoji: '🧽' },
@@ -119,6 +144,7 @@ export function buildSeed() {
       requirePin: true,
       soundOn: true,
       layoutMode: 'auto', // 'auto' | 'phone' | 'tablet'
+      landmineRates: { ...DEFAULT_RATES },
     },
   }
 }

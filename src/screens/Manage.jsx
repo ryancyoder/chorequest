@@ -7,6 +7,7 @@ import { putPhoto, photoUrl } from '../lib/photos.js'
 import { MEMBER_COLORS } from '../lib/gamify.js'
 import { checkCompletionPhoto, PASS_THRESHOLD, AI_BACKEND } from '../lib/ai.js'
 import { DAY_NAMES, pretty12 } from '../lib/date.js'
+import { ratesOf, DEFAULT_RATES, DEMO_RATES } from '../lib/landmines.js'
 
 export default function Manage() {
   const app = useApp()
@@ -445,6 +446,65 @@ function AiTab() {
   )
 }
 
+/* ─────────────────────── landmine tuning ─────────────────────── */
+
+function LandmineSettings({ app }) {
+  const rates = ratesOf(app.state)
+  const set = (patch) => app.setSetting('landmineRates', { ...rates, ...patch })
+
+  const FIELDS = [
+    { key: 'graceMins', label: 'Grace period', unit: 'min', hint: 'Nothing happens yet' },
+    { key: 'smokingMins', label: 'Streak burns at', unit: 'min', hint: 'From arming' },
+    { key: 'detonatedMins', label: 'Fines start at', unit: 'min', hint: 'From arming' },
+    { key: 'familyDrainPerHour', label: 'Family drain', unit: 'pts/hr', hint: 'Off the family goal' },
+    { key: 'finePerHour', label: 'Offender fine', unit: 'pts/hr', hint: 'Into the pot' },
+    { key: 'defuseReward', label: 'Defuse reward', unit: 'pts', hint: 'For cleaning it up' },
+  ]
+
+  return (
+    <div className="card">
+      <p className="muted" style={{ marginTop: 0 }}>
+        How fast a mess turns expensive. An unclaimed landmine drains the family 1.5× faster than
+        one somebody has owned up to — that's the nudge to confess.
+      </p>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+        {FIELDS.map((f) => (
+          <label className="field" key={f.key} style={{ marginBottom: 0 }}>
+            <span>{f.label} ({f.unit})</span>
+            <input
+              type="number"
+              min="1"
+              value={rates[f.key]}
+              onChange={(e) => set({ [f.key]: Math.max(1, Number(e.target.value) || 1) })}
+            />
+            <span className="tiny">{f.hint}</span>
+          </label>
+        ))}
+      </div>
+
+      <div className="divider" />
+
+      <div className="row wrap">
+        <button className="btn sm" onClick={() => set({ ...DEFAULT_RATES })}>↩️ Back to defaults</button>
+        <button
+          className="btn sm no"
+          onClick={() => {
+            set({ ...DEMO_RATES })
+            app.notify('Speed run on — the whole ladder in 3 minutes', '⏩')
+          }}
+        >
+          ⏩ Speed run (for testing)
+        </button>
+      </div>
+      <p className="tiny" style={{ marginTop: 8 }}>
+        Speed run compresses grace → streak burn → fines into about three minutes so you can watch the
+        whole thing escalate. Put it back on defaults before the kids use it for real.
+      </p>
+    </div>
+  )
+}
+
 /* ─────────────────────────── settings ─────────────────────────── */
 
 function SettingsTab({ app }) {
@@ -501,6 +561,9 @@ function SettingsTab({ app }) {
           </p>
         )}
       </div>
+
+      <div className="section-title">💣 Family sabotage</div>
+      <LandmineSettings app={app} />
 
       <div className="section-title">Snapshot</div>
       <div className="row" style={{ gap: 8 }}>
