@@ -563,6 +563,63 @@ label.field > span { display: block; font-size: 12px; font-weight: 800; text-tra
   50% { box-shadow: 0 0 0 14px #ff5c6c00; }
 }
 
+/* ═══════════════════════ 🗓️ month view ═══════════════════════ */
+
+.month { border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; background: var(--card); }
+.monthhead {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  background: rgba(20, 16, 43, .9);
+}
+.monthhead > div {
+  padding: 7px 2px; text-align: center; font-size: 9.5px; font-weight: 800;
+  letter-spacing: .07em; text-transform: uppercase; color: var(--ink-faint);
+}
+/* minmax(0,1fr) — plain 1fr won't shrink below its content and blows the grid out */
+.monthgrid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.monthcell {
+  position: relative; min-height: 74px; padding: 4px 3px 3px;
+  border-top: 1px solid var(--line); border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 2px; align-items: stretch;
+  text-align: left; transition: background .15s;
+}
+.monthcell:nth-child(7n) { border-right: none; }
+.monthcell:hover { background: var(--card-2); }
+.monthcell.dim { opacity: .38; }
+.monthcell.today { background: color-mix(in srgb, var(--gold) 10%, transparent); }
+.monthcell .num { font-size: 12px; font-weight: 800; padding-left: 2px; }
+.monthcell.today .num { color: var(--gold); }
+.monthcell .bits { display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+.monthcell .mbit {
+  font-size: 8.5px; font-weight: 700; line-height: 1.2;
+  padding: 2px 4px; border-radius: 5px; background: rgba(0,0,0,.34);
+  border-left: 2px solid var(--c); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.monthcell .mbit.away { background: #4cc9f026; border-left-color: var(--accent-2); }
+.monthcell .mmore { font-size: 8px; font-weight: 800; color: var(--ink-faint); padding-left: 3px; }
+.monthcell .chorepip {
+  position: absolute; top: 4px; right: 4px;
+  min-width: 14px; height: 14px; border-radius: 99px; padding: 0 4px;
+  background: color-mix(in srgb, var(--member) 55%, transparent);
+  font-size: 9px; font-weight: 800; display: grid; place-items: center;
+}
+
+.app.tablet .monthcell { min-height: 102px; }
+.app.tablet .monthcell .mbit { font-size: 10px; }
+
+/* On a phone a month cell is ~45px wide — labels don't fit, so show dots. */
+@media (max-width: 620px) {
+  .monthcell { min-height: 58px; padding: 3px 2px; }
+  .monthcell .num { font-size: 11px; }
+  .monthcell .bits { flex-direction: row; flex-wrap: wrap; gap: 3px; padding: 2px; }
+  .monthcell .mbit {
+    width: 7px; height: 7px; padding: 0; border-radius: 99px;
+    border-left: none; background: var(--c); font-size: 0; overflow: hidden;
+  }
+  .monthcell .mbit.away { background: var(--accent-2); }
+  .monthcell .mmore { font-size: 7.5px; }
+  .monthcell .chorepip { display: none; }
+}
+
 /* ═══════════════════════ 🏅 personal records ═══════════════════════ */
 
 .track { border-left-color: var(--accent-2); }

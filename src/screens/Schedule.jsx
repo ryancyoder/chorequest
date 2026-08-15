@@ -1,8 +1,11 @@
 import { Fragment, useState } from 'react'
 import { useApp } from '../store/AppContext.jsx'
-import { Empty, Sheet, DayPicker, EmojiPicker, DangerButton } from '../components/ui.jsx'
+import { Empty, DangerButton } from '../components/ui.jsx'
+import EventEditor from '../components/EventEditor.jsx'
+import MonthView from '../components/MonthView.jsx'
 import { choresOn, eventsOn, choreSubmission, dayStats, memberProgress } from '../store/selectors.js'
 import { todayISO, weekOf, fromISO, DAY_NAMES, pretty12, relativeDay, addDays } from '../lib/date.js'
+import { monthLabel, addMonths, awayEventOn, isMultiDay, normalizeMemberIds } from '../lib/schedule.js'
 
 export default function Schedule() {
   const app = useApp()
@@ -11,6 +14,8 @@ export default function Schedule() {
   const [date, setDate] = useState(todayISO())
   const [who, setWho] = useState('all') // 'all' | memberId
   const [weekOffset, setWeekOffset] = useState(0)
+  const [view, setView] = useState('week') // 'week' | 'month'
+  const [monthCursor, setMonthCursor] = useState(todayISO())
   const [editing, setEditing] = useState(null)
 
   const week = weekOf(addDays(todayISO(), weekOffset * 7))
@@ -21,14 +26,29 @@ export default function Schedule() {
       <div className="spread" style={{ margin: '4px 0 10px' }}>
         <h1 style={{ fontSize: 26 }}>Schedule</h1>
         <div className="row">
-          <button className="btn sm ghost" onClick={() => setWeekOffset((w) => w - 1)}>‹</button>
-          <span className="tiny">{weekOffset === 0 ? 'This week' : weekOffset === 1 ? 'Next week' : weekOffset === -1 ? 'Last week' : `${weekOffset > 0 ? '+' : ''}${weekOffset} wks`}</span>
-          <button className="btn sm ghost" onClick={() => setWeekOffset((w) => w + 1)}>›</button>
+          {view === 'week' ? (
+            <>
+              <button className="btn sm ghost" onClick={() => setWeekOffset((w) => w - 1)}>‹</button>
+              <span className="tiny">{weekOffset === 0 ? 'This week' : weekOffset === 1 ? 'Next week' : weekOffset === -1 ? 'Last week' : `${weekOffset > 0 ? '+' : ''}${weekOffset} wks`}</span>
+              <button className="btn sm ghost" onClick={() => setWeekOffset((w) => w + 1)}>›</button>
+            </>
+          ) : (
+            <>
+              <button className="btn sm ghost" onClick={() => setMonthCursor((m) => addMonths(m, -1))}>‹</button>
+              <span className="tiny">{monthLabel(monthCursor)}</span>
+              <button className="btn sm ghost" onClick={() => setMonthCursor((m) => addMonths(m, 1))}>›</button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* week strip — the tablet grids show the whole week already */}
-      <div className="weekstrip" style={{ display: app.layout === 'tablet' ? 'none' : undefined }}>
+      <div className="tabbar" style={{ marginBottom: 10 }}>
+        <button className={view === 'week' ? 'on' : ''} onClick={() => setView('week')}>📅 Week</button>
+        <button className={view === 'month' ? 'on' : ''} onClick={() => setView('month')}>🗓️ Month</button>
+      </div>
+
+      {/* week strip — hidden in month view and on tablet, which show the span already */}
+      <div className="weekstrip" style={{ display: app.layout === 'tablet' || view === 'month' ? 'none' : undefined }}>
         {week.map((iso) => {
           const d = fromISO(iso)
           const load = who === 'all'
@@ -65,6 +85,20 @@ export default function Schedule() {
         ))}
       </div>
 
+      {view === 'month' ? (
+        <>
+          <MonthView
+            state={state}
+            cursor={monthCursor}
+            who={who}
+            members={state.members}
+            onPick={(iso) => { setDate(iso); setView('week'); setWeekOffset(weeksFromNow(iso)) }}
+          />
+          <div className="section-title">{relativeDay(date)}</div>
+          <DayAgenda state={state} who={who} date={date} onEdit={setEditing} canEdit={app.isParentMode} />
+        </>
+      ) : (
+        <>
       <div className="section-title">
         {app.layout === 'tablet'
           ? (who === 'all' ? 'The whole week' : `${state.members.find((m) => m.id === who)?.name}'s week`)
@@ -134,14 +168,25 @@ export default function Schedule() {
       ) : (
         <MemberDay state={state} memberId={who} date={date} onEdit={setEditing} canEdit={app.isParentMode} />
       )}
+        </>
+      )}
 
       {app.isParentMode && (
-        <button className="fab" onClick={() => setEditing({ memberId: who === 'all' ? me.id : who, days: [fromISO(date).getDay()] })}>＋</button>
+        <button
+          className="fab"
+          onClick={() => setEditing({
+            memberIds: who === 'all' ? [] : [who],
+            kind: view === 'month' ? 'once' : 'repeat',
+            dateISO: date,
+            days: [fromISO(date).getDay()],
+          })}
+        >＋</button>
       )}
 
       <EventEditor
         open={!!editing}
         draft={editing}
+        state={state}
         onClose={() => setEditing(null)}
         onSave={(d) => {
           if (d.id) app.updateEvent(d.id, d)
@@ -151,6 +196,73 @@ export default function Schedule() {
         onDelete={(id) => { app.removeEvent(id); setEditing(null) }}
         members={state.members}
       />
+    </div>
+  )
+}
+
+function weeksFromNow(iso) {
+  const start = weekOf(todayISO())[0]
+  const target = weekOf(iso)[0]
+  return Math.round((fromISO(target) - fromISO(start)) / (7 * 86400000))
+}
+
+/** Everything happening on one date, across whoever is in focus. */
+function DayAgenda({ state, who, date, onEdit, canEdit }) {
+  const members = who === 'all' ? state.members : state.members.filter((m) => m.id === who)
+  const rows = members
+    .map((m) => ({ m, evts: eventsOn(state, m.id, date), chs: choresOn(state, m.id, date) }))
+    .filter((r) => r.evts.length || r.chs.length)
+
+  if (!rows.length) return <Empty emoji="🌤️" title="Wide open">Nothing scheduled.</Empty>
+
+  return (
+    <div className="stack">
+      {rows.map(({ m, evts, chs }) => {
+        const away = awayEventOn(state, m.id, date)
+        return (
+          <div className="card" key={m.id} style={{ '--member': m.color, borderLeft: `4px solid ${m.color}` }}>
+            <div className="spread" style={{ marginBottom: 8 }}>
+              <div className="row">
+                <span style={{ fontSize: 22 }}>{m.emoji}</span>
+                <b>{m.name}</b>
+              </div>
+              {away && <span className="badge-status info">🧳 away · chores paused</span>}
+            </div>
+            <div className="stack">
+              {evts.map((e) => (
+                <div
+                  key={e.id}
+                  className={`task evt ${e.category}`}
+                  onClick={() => canEdit && onEdit(e)}
+                >
+                  <div className="ico">{e.emoji}</div>
+                  <div className="grow">
+                    <div className="ttl">{e.title}</div>
+                    <div className="sub">
+                      <span>{e.allDay ? 'All day' : `${pretty12(e.start)}${e.end ? ` – ${pretty12(e.end)}` : ''}`}</span>
+                      {isMultiDay(e) && <span>📆 through {relativeDay(e.endDateISO)}</span>}
+                      {normalizeMemberIds(e).length === 0 && <span>👨‍👩‍👧‍👦 everyone</span>}
+                      {normalizeMemberIds(e).length > 1 && <span>👥 shared</span>}
+                    </div>
+                    {(e.duties || []).filter((x) => x.memberId === m.id).map((x) => (
+                      <div className="tiny" key={x.id} style={{ marginTop: 4, color: 'var(--gold)' }}>📋 {x.text}</div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {chs.map((c) => (
+                <div key={c.id} className="task" style={{ opacity: .85 }}>
+                  <div className="ico">{c.emoji}</div>
+                  <div className="grow">
+                    <div className="ttl">{c.title}</div>
+                    <div className="sub"><span>chore</span>{c.time && <span>{pretty12(c.time)}</span>}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -312,75 +424,5 @@ function MemberDay({ state, memberId, date, onEdit, canEdit }) {
         </div>
       ))}
     </div>
-  )
-}
-
-const CATEGORIES = ['school', 'sport', 'music', 'work', 'other']
-
-function EventEditor({ open, draft, onClose, onSave, onDelete, members }) {
-  const [d, setD] = useState(draft || {})
-  const key = draft?.id || draft?.memberId || 'new'
-  // Re-seed the form whenever a different event is opened.
-  const [seed, setSeed] = useState(key)
-  if (open && seed !== key) {
-    setSeed(key)
-    setD({
-      title: '', emoji: '📌', start: '16:00', end: '17:00', category: 'other',
-      days: [1], memberId: members[0]?.id, ...draft,
-    })
-  }
-
-  if (!open) return null
-  const set = (patch) => setD((x) => ({ ...x, ...patch }))
-
-  return (
-    <Sheet open={open} onClose={onClose} title={d.id ? 'Edit event' : 'Add to the schedule'}>
-      <label className="field">
-        <span>What is it?</span>
-        <input value={d.title || ''} onChange={(e) => set({ title: e.target.value })} placeholder="Soccer practice" />
-      </label>
-
-      <label className="field">
-        <span>Icon</span>
-        <EmojiPicker value={d.emoji} onChange={(emoji) => set({ emoji })} set="event" />
-      </label>
-
-      <label className="field">
-        <span>Who</span>
-        <select value={d.memberId} onChange={(e) => set({ memberId: e.target.value })}>
-          {members.map((m) => <option key={m.id} value={m.id}>{m.emoji} {m.name}</option>)}
-        </select>
-      </label>
-
-      <label className="field">
-        <span>Repeats on</span>
-        <DayPicker value={d.days || []} onChange={(days) => set({ days })} />
-      </label>
-
-      <div className="row">
-        <label className="field grow">
-          <span>Starts</span>
-          <input type="time" value={d.start || ''} onChange={(e) => set({ start: e.target.value })} />
-        </label>
-        <label className="field grow">
-          <span>Ends</span>
-          <input type="time" value={d.end || ''} onChange={(e) => set({ end: e.target.value })} />
-        </label>
-      </div>
-
-      <label className="field">
-        <span>Category</span>
-        <div className="chipgroup">
-          {CATEGORIES.map((c) => (
-            <button key={c} className={`chip ${d.category === c ? 'on' : ''}`} onClick={() => set({ category: c })}>{c}</button>
-          ))}
-        </div>
-      </label>
-
-      <div className="row" style={{ marginTop: 6 }}>
-        <button className="btn primary grow" disabled={!d.title} onClick={() => onSave(d)}>Save</button>
-        {d.id && <DangerButton onConfirm={() => onDelete(d.id)}>Delete</DangerButton>}
-      </div>
-    </Sheet>
   )
 }

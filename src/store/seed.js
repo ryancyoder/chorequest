@@ -85,19 +85,33 @@ export function buildSeed() {
     { id: id('c', 16), title: 'Trash + recycling to curb', emoji: '♻️', memberId: 'm1', days: [1],      time: '20:00', points: 20, coins: 0,  needsPhoto: false, referencePhotoId: null, checklist: [], room: 'Garage' },
   ]
 
+  const ev = (o) => ({
+    kind: 'repeat', memberIds: [], days: [], allDay: false, away: false,
+    duties: [], notes: '', fromISO: null, untilISO: null, dateISO: null, endDateISO: null, ...o,
+  })
+
   const events = [
-    { id: id('e', 1), memberId: 'm3', title: 'Soccer practice', emoji: '⚽', days: [2, 4], start: '17:30', end: '19:00', category: 'sport' },
-    { id: id('e', 2), memberId: 'm3', title: 'School',          emoji: '🏫', days: SCHOOL, start: '08:00', end: '15:10', category: 'school' },
-    { id: id('e', 3), memberId: 'm4', title: 'School',          emoji: '🏫', days: SCHOOL, start: '08:00', end: '15:10', category: 'school' },
-    { id: id('e', 4), memberId: 'm4', title: 'Karate',          emoji: '🥋', days: [1, 3], start: '17:00', end: '18:00', category: 'sport' },
-    { id: id('e', 5), memberId: 'm5', title: 'School',          emoji: '🏫', days: SCHOOL, start: '08:00', end: '15:10', category: 'school' },
-    { id: id('e', 6), memberId: 'm5', title: 'Piano lesson',    emoji: '🎹', days: [3],    start: '16:00', end: '16:45', category: 'music' },
-    { id: id('e', 7), memberId: 'm6', title: 'School',          emoji: '🏫', days: SCHOOL, start: '08:15', end: '14:45', category: 'school' },
-    { id: id('e', 8), memberId: 'm7', title: 'Preschool',       emoji: '🎨', days: [2, 4], start: '09:00', end: '12:00', category: 'school' },
-    { id: id('e', 9), memberId: 'm1', title: 'Work',            emoji: '💼', days: SCHOOL, start: '08:30', end: '17:30', category: 'work' },
-    { id: id('e', 10), memberId: 'm2', title: 'Work',           emoji: '💼', days: [1, 2, 3], start: '09:00', end: '16:00', category: 'work' },
-    { id: id('e', 11), memberId: 'm3', title: 'Youth group',    emoji: '🙌', days: [3],    start: '18:30', end: '20:00', category: 'other' },
-    { id: id('e', 12), memberId: 'm5', title: 'Swim team',      emoji: '🏊', days: [6],    start: '09:00', end: '10:30', category: 'sport' },
+    // One-offs, shared events and a trip — the things a planner actually needs.
+    ev({ id: id('e', 20), memberIds: ['m5'], title: 'Dentist', emoji: '🦷', kind: 'once', dateISO: addDays(t, 4), start: '14:20', end: '15:00', category: 'appointment' }),
+    ev({ id: id('e', 21), memberIds: [], title: 'Grandma & Grandpa visiting', emoji: '👵', kind: 'once', dateISO: addDays(t, 8), endDateISO: addDays(t, 10), allDay: true, category: 'family',
+      duties: [{ id: 'd1', text: 'Strip the guest bed and remake it', memberId: 'm3' }, { id: 'd2', text: 'Tidy the front room', memberId: 'm4' }] }),
+    ev({ id: id('e', 22), memberIds: ['m4'], title: 'Scout camp', emoji: '🏕️', kind: 'once', dateISO: addDays(t, 14), endDateISO: addDays(t, 18), allDay: true, away: true, category: 'trip' }),
+    ev({ id: id('e', 23), memberIds: ['m3', 'm5'], title: 'Carpool to swim', emoji: '🚗', kind: 'repeat', days: [6], start: '08:30', end: '09:00', category: 'sport',
+      duties: [{ id: 'd3', text: 'Driving this week', memberId: 'm1' }] }),
+    ev({ id: id('e', 24), memberIds: [], title: 'Family dinner', emoji: '🍽️', kind: 'repeat', days: [0], start: '18:00', end: '19:30', category: 'family' }),
+
+    ev({ id: id('e', 1), memberIds: ['m3'], title: 'Soccer practice', emoji: '⚽', days: [2, 4], start: '17:30', end: '19:00', category: 'sport' }),
+    ev({id: id('e', 2), memberIds: ['m3'], title: 'School',          emoji: '🏫', days: SCHOOL, start: '08:00', end: '15:10', category: 'school' }),
+    ev({id: id('e', 3), memberIds: ['m4'], title: 'School',          emoji: '🏫', days: SCHOOL, start: '08:00', end: '15:10', category: 'school' }),
+    ev({id: id('e', 4), memberIds: ['m4'], title: 'Karate',          emoji: '🥋', days: [1, 3], start: '17:00', end: '18:00', category: 'sport' }),
+    ev({id: id('e', 5), memberIds: ['m5'], title: 'School',          emoji: '🏫', days: SCHOOL, start: '08:00', end: '15:10', category: 'school' }),
+    ev({id: id('e', 6), memberIds: ['m5'], title: 'Piano lesson',    emoji: '🎹', days: [3],    start: '16:00', end: '16:45', category: 'music' }),
+    ev({id: id('e', 7), memberIds: ['m6'], title: 'School',          emoji: '🏫', days: SCHOOL, start: '08:15', end: '14:45', category: 'school' }),
+    ev({id: id('e', 8), memberIds: ['m7'], title: 'Preschool',       emoji: '🎨', days: [2, 4], start: '09:00', end: '12:00', category: 'school' }),
+    ev({id: id('e', 9), memberIds: ['m1'], title: 'Work',            emoji: '💼', days: SCHOOL, start: '08:30', end: '17:30', category: 'work' }),
+    ev({id: id('e', 10), memberIds: ['m2'], title: 'Work',           emoji: '💼', days: [1, 2, 3], start: '09:00', end: '16:00', category: 'work' }),
+    ev({id: id('e', 11), memberIds: ['m3'], title: 'Youth group',    emoji: '🙌', days: [3],    start: '18:30', end: '20:00', category: 'other' }),
+    ev({id: id('e', 12), memberIds: ['m5'], title: 'Swim team',      emoji: '🏊', days: [6],    start: '09:00', end: '10:30', category: 'sport' }),
   ]
 
   const jobs = [

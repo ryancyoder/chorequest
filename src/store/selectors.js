@@ -1,13 +1,19 @@
 import { dowOf, todayISO } from '../lib/date.js'
 import { levelFromXp, rankFor } from '../lib/gamify.js'
+import { occursOn, isForMember, awayOn, eventSortKey } from '../lib/schedule.js'
 
 export const byId = (list, id) => list.find((x) => x.id === id) || null
 
 export const children = (state) => state.members.filter((m) => m.role === 'child')
 export const parents = (state) => state.members.filter((m) => m.role === 'parent')
 
-/** Routine chores scheduled for a member on a date. */
+/**
+ * Routine chores scheduled for a member on a date.
+ * Someone who's away has no chores that day — being at camp shouldn't read as a
+ * stack of missed responsibilities when they get home.
+ */
 export function choresOn(state, memberId, dateISO) {
+  if (awayOn(state, memberId, dateISO)) return []
   const dow = dowOf(dateISO)
   return state.chores
     .filter((c) => c.memberId === memberId && c.days.includes(dow))
@@ -15,10 +21,16 @@ export function choresOn(state, memberId, dateISO) {
 }
 
 export function eventsOn(state, memberId, dateISO) {
-  const dow = dowOf(dateISO)
-  return state.events
-    .filter((e) => e.memberId === memberId && (e.dateISO ? e.dateISO === dateISO : e.days?.includes(dow)))
-    .sort((a, b) => (a.start || '99:99').localeCompare(b.start || '99:99'))
+  return (state.events || [])
+    .filter((e) => isForMember(e, memberId) && occursOn(e, dateISO))
+    .sort((a, b) => eventSortKey(a).localeCompare(eventSortKey(b)))
+}
+
+/** Everything on the calendar that day, for anyone. */
+export function allEventsOn(state, dateISO) {
+  return (state.events || [])
+    .filter((e) => occursOn(e, dateISO))
+    .sort((a, b) => eventSortKey(a).localeCompare(eventSortKey(b)))
 }
 
 /** The live submission for a chore on a given day, if any. */

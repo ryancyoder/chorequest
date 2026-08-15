@@ -219,11 +219,18 @@ export function AppProvider({ children }) {
     addEvent(data) {
       update((d) => {
         d.events.push({
-          id: uid('e'), memberId: d.members[0].id, title: 'New event', emoji: '📌',
-          days: [1], start: '16:00', end: '17:00', category: 'other', ...data,
+          id: uid('e'),
+          kind: 'repeat',           // 'repeat' | 'once'
+          memberIds: [],            // empty = the whole family
+          title: 'New event', emoji: '📌', category: 'other',
+          days: [1], start: '16:00', end: '17:00',
+          fromISO: null, untilISO: null,   // repeat bounds
+          dateISO: null, endDateISO: null, // one-off span
+          allDay: false, away: false, notes: '', duties: [],
+          ...data,
         })
       })
-      notify('Added to the schedule', '📅')
+      notify('Added to the calendar', '📅')
     },
 
     updateEvent(id, patch) {

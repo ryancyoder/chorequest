@@ -44,6 +44,17 @@ function migrate(state) {
     ...m,
   }))
 
+  // Events used to hold a single memberId and repeat weekly with no bounds.
+  s.events = s.events.map((e) => ({
+    kind: e.dateISO ? 'once' : 'repeat',
+    memberIds: Array.isArray(e.memberIds) ? e.memberIds : e.memberId ? [e.memberId] : [],
+    days: e.days || [],
+    allDay: false,
+    away: false,
+    duties: [],
+    ...e,
+  }))
+
   s.tracks = s.tracks.map((t) => ({ log: {}, paid: {}, best: 0, bestAt: null, archived: false, ...t }))
   s.prs = s.prs.map((p) => ({ cheers: [], ...p }))
 

@@ -8,6 +8,7 @@ import {
   STATUS_META, jobsFor, jobSubmission, pendingApprovals,
 } from '../store/selectors.js'
 import { todayISO, pretty12, relativeDay, timeOfDayBucket } from '../lib/date.js'
+import { awayEventOn, conflictsOn } from '../lib/schedule.js'
 import { streakMultiplier } from '../lib/gamify.js'
 
 const BUCKETS = [
@@ -44,8 +45,15 @@ export default function Today({ go }) {
     items: chores.filter((c) => timeOfDayBucket(c.time) === b.key),
   })).filter((g) => g.items.length)
 
+  // Things the calendar says this person is personally on the hook for today.
+  const dutiesToday = events.flatMap((e) =>
+    (e.duties || []).filter((d) => d.memberId === me.id).map((duty) => ({ event: e, duty })),
+  )
+  const clashes = conflictsOn(state, me.id, date, chores)
+
   const sections = buildSections({
-    app, state, me, date, stats, chores, grouped, events, myJobs, queue, go, setProof, setConfirmTask,
+    app, state, me, date, stats, chores, grouped, events, myJobs, queue, go,
+    setProof, setConfirmTask, dutiesToday, clashes,
   })
 
   return (
@@ -83,14 +91,17 @@ export default function Today({ go }) {
 
       {/* Phone keeps its original top-to-bottom order; tablet splits the same
           blocks into two panes so the wide screen isn't one tall column. */}
+      {sections.away}
+
       {app.layout === 'tablet' ? (
         <div className="cols">
           <div className="col">{sections.chores}{sections.records}</div>
-          <div className="col">{sections.schedule}{sections.jobs}</div>
+          <div className="col">{sections.schedule}{sections.duties}{sections.jobs}</div>
         </div>
       ) : (
         <>
           {sections.schedule}
+          {sections.duties}
           {sections.chores}
           {sections.records}
           {sections.jobs}
@@ -132,7 +143,7 @@ export default function Today({ go }) {
 }
 
 /** The stackable pieces of the Today screen, so each layout can order them. */
-function buildSections({ app, state, me, date, stats, chores, grouped, events, myJobs, queue, go, setProof, setConfirmTask }) {
+function buildSections({ app, state, me, date, stats, chores, grouped, events, myJobs, queue, go, setProof, setConfirmTask, dutiesToday = [], clashes = [] }) {
   return {
     nudge: app.isParentMode && queue.length > 0 && (
         <div className="card tap glow" style={{ marginTop: 12 }} onClick={() => go('review')}>
@@ -167,6 +178,7 @@ function buildSections({ app, state, me, date, stats, chores, grouped, events, m
                     chore={c}
                     sub={choreSubmission(state, c.id, date)}
                     color={me.color}
+                    clash={clashes.find((x) => x.chore.id === c.id)?.event}
                     onPhoto={() => setProof({ kind: 'chore', target: c })}
                     onQuick={() => setConfirmTask(c)}
                   />
@@ -196,6 +208,38 @@ function buildSections({ app, state, me, date, stats, chores, grouped, events, m
     ),
 
     records: <CheckInCard member={me} />,
+
+    away: awayEventOn(state, me.id, date) && (
+      <div className="card glow" style={{ marginTop: 12 }}>
+        <div className="row">
+          <span style={{ fontSize: 26 }}>🧳</span>
+          <div className="grow">
+            <b>You're away — {awayEventOn(state, me.id, date).title}</b>
+            <div className="tiny">Chores are paused until you're back. Streaks aren't punished for it.</div>
+          </div>
+        </div>
+      </div>
+    ),
+
+    duties: dutiesToday.length > 0 && (
+      <>
+        <div className="section-title">📋 You're on for <span className="count">{dutiesToday.length}</span></div>
+        <div className="stack">
+          {dutiesToday.map(({ event, duty }) => (
+            <div key={duty.id} className="task" style={{ borderLeftColor: 'var(--gold)' }}>
+              <div className="ico">{event.emoji}</div>
+              <div className="grow">
+                <div className="ttl">{duty.text}</div>
+                <div className="sub">
+                  <span>{event.title}</span>
+                  {!event.allDay && event.start && <span>⏰ {pretty12(event.start)}</span>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </>
+    ),
 
     jobs: myJobs.length > 0 && (
       <>
@@ -229,7 +273,7 @@ function buildSections({ app, state, me, date, stats, chores, grouped, events, m
   }
 }
 
-function ChoreRow({ chore, sub, color, onPhoto, onQuick }) {
+function ChoreRow({ chore, sub, color, clash, onPhoto, onQuick }) {
   const status = sub?.status
   const meta = status ? STATUS_META[status] : null
   const done = status === 'approved'
@@ -252,6 +296,11 @@ function ChoreRow({ chore, sub, color, onPhoto, onQuick }) {
         )}
         {status === 'ai_rejected' && sub.ai?.detail && (
           <div className="tiny" style={{ color: 'var(--warn)', marginTop: 5 }}>{sub.ai.detail}</div>
+        )}
+        {!done && clash && (
+          <div className="tiny" style={{ color: 'var(--warn)', marginTop: 5 }}>
+            ⚠️ Clashes with {clash.emoji} {clash.title} ({pretty12(clash.start)})
+          </div>
         )}
       </div>
 
