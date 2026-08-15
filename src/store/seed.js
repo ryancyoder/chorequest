@@ -5,6 +5,27 @@ import { DEFAULT_RATES } from '../lib/landmines.js'
 const id = (p, n) => `${p}_${n}`
 
 /**
+ * Build a track with backdated history.
+ * `days` runs oldest → newest ending yesterday: 1 = hit, -1 = slip, 0 = not logged.
+ * Today is deliberately left blank so there's a real check-in waiting.
+ */
+function mkTrack(tid, memberId, kind, emoji, title, today, days, best) {
+  const log = {}
+  const paid = {}
+  days.forEach((v, i) => {
+    if (!v) return
+    const iso = addDays(today, -(days.length - i))
+    log[iso] = v === 1 ? 'hit' : 'slip'
+    paid[iso] = true
+  })
+  return {
+    id: tid, memberId, kind, emoji, title,
+    log, paid, best, bestAt: Date.now() - 86400e3,
+    createdAt: Date.now() - days.length * 86400e3, archived: false,
+  }
+}
+
+/**
  * Starter family — everything here is editable in the app (Family → Manage).
  * Two parents + five kids = the 7-member household.
  */
@@ -108,6 +129,25 @@ export function buildSeed() {
     jobs,
     prizes,
     familyGoals,
+    // Personal records. Everything here is opt-in — a vice is on the board only
+    // because that person chose to tell the family about it.
+    tracks: [
+      mkTrack('t1', 'm3', 'virtue', '📖', 'Read for 20 minutes', t, [1, 1, 1, 1, 1, 1, 0, 1, 1], 9),
+      mkTrack('t2', 'm3', 'vice', '📱', 'No screens after 9pm', t, [1, 1, 0, 1, 1, 1], 5),
+      mkTrack('t3', 'm4', 'vice', '😤', 'No snapping when I get frustrated', t, [1, 1, 1, -1, 1, 1, 1], 6),
+      mkTrack('t4', 'm5', 'virtue', '🎹', 'Practice before dinner', t, [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], 12),
+      mkTrack('t5', 'm6', 'virtue', '🧦', 'Clothes in the hamper', t, [1, 1, 0, 1, 1], 4),
+      mkTrack('t6', 'm7', 'virtue', '💬', 'Say something kind to a sibling', t, [1, 1, 1], 3),
+      // Parents on the board too — it stops being a thing done *to* the kids.
+      mkTrack('t7', 'm1', 'vice', '📵', 'No phone at the dinner table', t, [1, 1, 1, -1, 1, 1], 5),
+      mkTrack('t8', 'm2', 'virtue', '🚶', 'Walk after dinner', t, [1, 1, 1, 1, 1, 1, 1], 7),
+    ],
+    prs: [
+      { id: 'pr1', memberId: 'm5', trackId: 't4', title: 'Practice before dinner', emoji: '🎹', kind: 'virtue', value: 12, milestone: null, at: Date.now() - 5 * 3600e3, cheers: [{ memberId: 'm2', at: Date.now() - 4 * 3600e3, dateISO: t }] },
+      { id: 'pr2', memberId: 'm4', trackId: 't3', title: 'No snapping when I get frustrated', emoji: '😤', kind: 'vice', value: 3, comeback: true, at: Date.now() - 30 * 3600e3, cheers: [] },
+    ],
+    familyRecord: { best: 54, bestAt: Date.now() - 4 * 86400e3 },
+
     // One live example, still inside its grace period so nothing is on fire yet
     // and nobody has owned up to it. Tap it to see the whole mechanic.
     landmines: [

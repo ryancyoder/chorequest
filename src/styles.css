@@ -563,6 +563,36 @@ label.field > span { display: block; font-size: 12px; font-weight: 800; text-tra
   50% { box-shadow: 0 0 0 14px #ff5c6c00; }
 }
 
+/* ═══════════════════════ 🏅 personal records ═══════════════════════ */
+
+.track { border-left-color: var(--accent-2); }
+.track.vice { border-left-color: #ff9f1c; }
+.track.hit { border-left-color: var(--good); background: linear-gradient(100deg, #63e6a514, var(--card)); }
+.track.slipped { opacity: .72; border-left-color: var(--ink-faint); }
+
+.prcard-empty {
+  border: 1.5px dashed var(--line);
+  background: linear-gradient(120deg, #ffd60a0f, transparent);
+}
+
+/* three weeks of history at a glance */
+.dotgrid { display: grid; grid-template-columns: repeat(21, 1fr); gap: 3px; }
+.dotday {
+  display: block; aspect-ratio: 1; border-radius: 4px; background: rgba(255,255,255,.07);
+}
+.dotday.hit { background: var(--good); box-shadow: 0 0 7px #63e6a566; }
+.dotday.slip { background: #ff5c6c66; }
+.dotday.today { outline: 2px solid var(--gold); outline-offset: 1px; }
+
+.prfeed { border-left: 4px solid var(--gold); }
+.prfeed.comeback { border-left-color: var(--accent-2); }
+
+.cheerrow { display: flex; align-items: center; gap: 3px; margin-top: 7px; font-size: 15px; }
+.cheerrow .tiny { margin-left: 5px; }
+
+.trophyrow { padding: 5px 0; border-bottom: 1px solid var(--line); }
+.trophyrow:last-child { border-bottom: none; }
+
 /* ═══════════════════════ 💣 landmines ═══════════════════════ */
 
 .minebanner {

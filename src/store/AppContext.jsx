@@ -6,6 +6,10 @@ import { todayISO, addDays } from '../lib/date.js'
 import { earnedBadges, streakMultiplier, levelFromXp } from '../lib/gamify.js'
 import { useWideViewport, resolveLayout } from '../lib/layout.js'
 import { ratesOf, stageOf, cumulativeDamage, stageIndex } from '../lib/landmines.js'
+import {
+  streakOf, isComeback, lastMilestoneHit, familyStreakTotal,
+  XP_PER_DAY, XP_COMEBACK, XP_PER_CHEER, CHEERS_PER_DAY, cheersGivenToday, hasCheered,
+} from '../lib/records.js'
 
 const Ctx = createContext(null)
 export const useApp = () => useContext(Ctx)
@@ -75,6 +79,32 @@ export function AppProvider({ children }) {
   function logActivity(draft, memberId, text, emoji) {
     draft.activity.unshift({ id: uid('a'), at: Date.now(), memberId, text, emoji })
     draft.activity = draft.activity.slice(0, 60)
+  }
+
+  /**
+   * Hand out XP inside an update draft, honouring the landmine freeze: a frozen
+   * member's points go to escrow instead of vanishing. Personal-development
+   * recognition always lands — only the points wait.
+   */
+  function awardXp(draft, memberId, amount) {
+    if (!amount || amount <= 0) return
+    const member = draft.members.find((m) => m.id === memberId)
+    if (!member) return
+
+    const frozen = draft.landmines.some(
+      (lm) => lm.status === 'armed' && lm.ownerId === memberId && !lm.disputed,
+    )
+    if (frozen) {
+      member.escrowXp = (member.escrowXp || 0) + amount
+      return
+    }
+
+    member.xp += amount
+    draft.familyGoals.forEach((g) => {
+      if (g.achievedAt) return
+      g.progress = Math.min(g.target, g.progress + amount)
+      if (g.progress >= g.target) g.achievedAt = Date.now()
+    })
   }
 
   /* ───────────────────────── members / session ───────────────────────── */
@@ -567,6 +597,152 @@ export function AppProvider({ children }) {
 
     removeFamilyGoal(id) {
       update((d) => { d.familyGoals = d.familyGoals.filter((g) => g.id !== id) })
+    },
+
+    /* ───────────────────────── 🏅 personal records ───────────────────────── */
+
+    addTrack({ memberId, kind, title, emoji }) {
+      update((d) => {
+        d.tracks.push({
+          id: uid('tr'), memberId, kind, // 'virtue' | 'vice'
+          title: title.trim(), emoji: emoji || (kind === 'vice' ? '🚫' : '⭐'),
+          log: {},      // dateISO -> 'hit' | 'slip'
+          paid: {},     // dateISO -> true, so undo/redo can't farm XP
+          best: 0, bestAt: null,
+          createdAt: Date.now(), archived: false,
+        })
+        logActivity(d, memberId, `started working on “${title.trim()}”`, kind === 'vice' ? '🚭' : '🌱')
+      })
+      notify(kind === 'vice' ? 'On the board. The family has your back.' : 'Track added — day one starts now.', '🏅')
+    },
+
+    updateTrack(id, patch) {
+      update((d) => {
+        const t = d.tracks.find((x) => x.id === id)
+        if (t) Object.assign(t, patch)
+      })
+    },
+
+    archiveTrack(id) {
+      update((d) => {
+        const t = d.tracks.find((x) => x.id === id)
+        if (t) t.archived = true
+      })
+      notify('Retired — the record still stands', '🏅')
+    },
+
+    /**
+     * Log a day on a track. `value` is 'hit', 'slip', or null to undo.
+     * Everything downstream (streak, PR, comeback, family record) is derived
+     * from the log rather than incremented, so undo/redo can't drift.
+     */
+    logTrackDay(trackId, dateISO, value) {
+      const track = (state.tracks || []).find((t) => t.id === trackId)
+      if (!track) return null
+
+      const today = todayISO()
+      const nextLog = { ...(track.log || {}) }
+      if (value) nextLog[dateISO] = value
+      else delete nextLog[dateISO]
+
+      const nextStreak = streakOf({ ...track, log: nextLog }, today)
+      const isPr = nextStreak > (track.best || 0)
+      const comeback = value === 'hit' && isComeback({ ...track, log: nextLog }, dateISO)
+      const milestone = isPr ? lastMilestoneHit(nextStreak) === nextStreak ? nextStreak : null : null
+      const alreadyPaid = !!(track.paid || {})[dateISO]
+
+      // Showing up pays a little; the PR itself pays the length of the record.
+      let xp = 0
+      if (value === 'hit' && !alreadyPaid) xp += XP_PER_DAY
+      if (comeback && !alreadyPaid) xp += XP_COMEBACK
+      if (isPr) xp += nextStreak
+
+      const member = state.members.find((m) => m.id === track.memberId)
+      const prevFamily = familyStreakTotal(state, today)
+
+      update((d) => {
+        const t = d.tracks.find((x) => x.id === trackId)
+        const mem = d.members.find((x) => x.id === track.memberId)
+        if (!t || !mem) return
+
+        t.log = nextLog
+        if (value === 'hit') t.paid = { ...(t.paid || {}), [dateISO]: true }
+        if (isPr) {
+          t.best = nextStreak
+          t.bestAt = Date.now()
+        }
+
+        awardXp(d, mem.id, xp)
+
+        if (isPr) {
+          d.prs.unshift({
+            id: uid('pr'),
+            memberId: mem.id, trackId: t.id,
+            title: t.title, emoji: t.emoji, kind: t.kind,
+            value: nextStreak, milestone,
+            at: Date.now(), cheers: [],
+          })
+          d.prs = d.prs.slice(0, 60)
+          logActivity(d, mem.id, `set a personal record — ${nextStreak} on “${t.title}”`, '🏅')
+        } else if (comeback) {
+          // We announce getting back up. We never announce falling down.
+          d.prs.unshift({
+            id: uid('pr'),
+            memberId: mem.id, trackId: t.id,
+            title: t.title, emoji: t.emoji, kind: t.kind,
+            value: nextStreak, comeback: true,
+            at: Date.now(), cheers: [],
+          })
+          d.prs = d.prs.slice(0, 60)
+          logActivity(d, mem.id, `got straight back on “${t.title}”`, '💪')
+        }
+
+        // The household record — everyone's live streaks added together.
+        const nowFamily = familyStreakTotal(d, today)
+        d.familyRecord = d.familyRecord || { best: 0, bestAt: null }
+        if (nowFamily > d.familyRecord.best) {
+          d.familyRecord = { best: nowFamily, bestAt: Date.now() }
+        }
+      })
+
+      const nowFamily = prevFamily - streakOf(track, today) + nextStreak
+      const familyPr = nowFamily > (state.familyRecord?.best || 0)
+
+      if (isPr) {
+        celebrate({
+          emoji: milestone ? '🏆' : '🏅',
+          title: milestone ? `${milestone} days!` : `New personal record — ${nextStreak}`,
+          subtitle: `${member?.name} just beat their own best on “${track.title}”.${familyPr ? ' And set a family record doing it.' : ''}`,
+          color: member?.color,
+        })
+      } else if (comeback) {
+        celebrate({
+          emoji: '💪',
+          title: 'Back on it',
+          subtitle: `${member?.name} slipped yesterday and showed up anyway. That's the hard part.`,
+          color: member?.color,
+        })
+      }
+
+      return { streak: nextStreak, isPr, comeback, xp }
+    },
+
+    /** Anyone can cheer anyone. The cheerer gets the point — generosity pays. */
+    cheerPr(prId, memberId) {
+      const pr = (state.prs || []).find((p) => p.id === prId)
+      if (!pr || hasCheered(pr, memberId)) return false
+      if (cheersGivenToday(state, memberId) >= CHEERS_PER_DAY) {
+        notify(`That's ${CHEERS_PER_DAY} cheers today — save some for tomorrow`, '📣')
+        return false
+      }
+      update((d) => {
+        const p = d.prs.find((x) => x.id === prId)
+        if (!p || p.cheers.some((c) => c.memberId === memberId)) return
+        p.cheers.push({ memberId, at: Date.now(), dateISO: todayISO() })
+        awardXp(d, memberId, XP_PER_CHEER)
+      })
+      notify('Cheered 📣', '📣')
+      return true
     },
 
     /* ───────────────────────── 💣 family sabotage ───────────────────────── */

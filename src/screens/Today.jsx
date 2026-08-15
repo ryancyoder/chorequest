@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useApp } from '../store/AppContext.jsx'
 import { Ring, Empty, Sheet } from '../components/ui.jsx'
 import ProofSheet from '../components/ProofSheet.jsx'
+import CheckInCard from '../components/CheckInCard.jsx'
 import {
   choresOn, choreSubmission, eventsOn, dayStats, memberProgress,
   STATUS_META, jobsFor, jobSubmission, pendingApprovals,
@@ -84,13 +85,14 @@ export default function Today({ go }) {
           blocks into two panes so the wide screen isn't one tall column. */}
       {app.layout === 'tablet' ? (
         <div className="cols">
-          <div className="col">{sections.chores}</div>
+          <div className="col">{sections.chores}{sections.records}</div>
           <div className="col">{sections.schedule}{sections.jobs}</div>
         </div>
       ) : (
         <>
           {sections.schedule}
           {sections.chores}
+          {sections.records}
           {sections.jobs}
         </>
       )}
@@ -192,6 +194,8 @@ function buildSections({ app, state, me, date, stats, chores, grouped, events, m
         </div>
       </>
     ),
+
+    records: <CheckInCard member={me} />,
 
     jobs: myJobs.length > 0 && (
       <>

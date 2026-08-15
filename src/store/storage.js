@@ -10,6 +10,9 @@ function migrate(state) {
   const s = { ...state }
 
   s.landmines = Array.isArray(s.landmines) ? s.landmines : []
+  s.tracks = Array.isArray(s.tracks) ? s.tracks : []
+  s.prs = Array.isArray(s.prs) ? s.prs : []
+  s.familyRecord = s.familyRecord || { best: 0, bestAt: null }
   s.submissions = Array.isArray(s.submissions) ? s.submissions : []
   s.activity = Array.isArray(s.activity) ? s.activity : []
   s.familyGoals = Array.isArray(s.familyGoals) ? s.familyGoals : []
@@ -40,6 +43,9 @@ function migrate(state) {
     streakBurned: false, disputed: false, stageAtDispute: null, confessed: false,
     ...m,
   }))
+
+  s.tracks = s.tracks.map((t) => ({ log: {}, paid: {}, best: 0, bestAt: null, archived: false, ...t }))
+  s.prs = s.prs.map((p) => ({ cheers: [], ...p }))
 
   return s
 }
