@@ -593,6 +593,11 @@ label.field > span { display: block; font-size: 12px; font-weight: 800; text-tra
   50% { box-shadow: 0 0 0 14px #ff5c6c00; }
 }
 
+.sagalink {
+  border-left: 4px solid var(--gold);
+  background: linear-gradient(100deg, #ffd60a14, var(--card));
+}
+
 /* ═══════════════════════ ⚔️ boss battle ═══════════════════════ */
 
 .boss {

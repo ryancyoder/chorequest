@@ -87,6 +87,25 @@ export default function Family({ go }) {
         })}
       </div>
 
+      <a
+        className="card tap sagalink"
+        href="./saga.html"
+        target="_blank"
+        rel="noopener"
+        style={{ display: 'block', textDecoration: 'none', color: 'inherit', marginTop: 12 }}
+      >
+        <div className="row">
+          <span style={{ fontSize: 26 }}>⚔️</span>
+          <div className="grow">
+            <b>Watch the Saga</b>
+            <div className="tiny">
+              A three-minute cartoon of how all of this works — starring your actual family.
+            </div>
+          </div>
+          <span style={{ fontSize: 20, opacity: .5 }}>›</span>
+        </div>
+      </a>
+
       <RecordsPanel />
 
       </div>
