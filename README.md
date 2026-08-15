@@ -44,6 +44,45 @@ the AI's score and signal breakdown, the parent's own checklist, an optional bon
 approve / send-back-with-a-note. Approval is what actually pays out XP, coins, streak,
 badges and family-goal progress, with a confetti moment on the kid's screen.
 
+**Landmines (family sabotage).** Somebody leaves a disaster and walks away. Anyone can
+photograph it and arm a landmine — pinned on a person, or left unclaimed. Then the timer
+runs and it gets progressively more expensive. See below.
+
+**Two layouts.** Phone gets the single column and bottom nav. An iPad in landscape gets a
+sidebar rail and two-pane content, and the schedule becomes a full-week matrix with the
+whole family down one side. It follows the viewport by default; pin either mode in
+Manage → Settings → Display.
+
+## How landmines work
+
+| Stage | When | What happens |
+|---|---|---|
+| 💣 **Armed** | first 2h | Grace period. Nothing has happened yet — go clean it up. |
+| ⏱️ **Ticking** | after 2h | The family goal starts losing points, every hour, for everyone. |
+| 🔥 **Smoking** | after 6h | The offender's streak burns to zero and bonuses are suspended. |
+| 💥 **Detonated** | after 12h | Fines come out of the offender's points and stack into a pot. |
+
+Whoever cleans it up and gets a parent's approval **takes the pot**. Clean up your own mess
+and the pot goes back to the family goal as restitution — you stop the bleeding, but you
+don't get paid for it.
+
+While a mine is live, the accused **can't cash out**. Their earnings aren't destroyed
+though: everything they earn goes to escrow and lands the instant the mine is cleared.
+
+Two pressure valves keep it fair. **Owning up** to an unclaimed mine hands back half the
+pot and resets the clock — confession is cheaper than getting caught. **Disputing** one
+freezes every penalty until a parent rules on it, so a sibling can't weaponize the feature.
+Parents can call off a false alarm outright. Unclaimed mines drain the family 1.5× faster
+than named ones, which tends to jog everyone's memory.
+
+Timings, rates and the defuse bounty are all tunable in **Manage → Settings → Family
+sabotage**, including a **⏩ Speed run** preset that compresses the whole ladder into about
+three minutes so you can watch it escalate before turning the kids loose on it.
+
+Defusal reuses the photo checker in reverse: the "after" shot is compared against the mess
+photo and has to be meaningfully *different*. The same pile from a fresh angle never
+reaches a parent.
+
 ## How the photo check works
 
 1. A parent photographs the chore **done right**, from the angle they want kids to shoot.
@@ -101,8 +140,15 @@ serializable object, and photos are already referenced by id rather than inlined
 
 ```
 src/
-  lib/        ai.js (photo check) · camera.js · dictation.js · photos.js · gamify.js · date.js
-  store/      AppContext.jsx (all actions) · selectors.js · seed.js · storage.js
-  components/ ProofSheet.jsx (the kid flow) · CameraCapture · DictationField · ui.jsx
-  screens/    Today · Schedule · Jobs · Rewards · Family · Review · Manage
+  lib/        ai.js (both photo checks) · landmines.js (escalation math) · layout.js
+              camera.js · dictation.js · photos.js · gamify.js · date.js
+  store/      AppContext.jsx (all actions) · selectors.js · seed.js · storage.js (+migration)
+  components/ ProofSheet (chore proof) · DefuseSheet · ReportMineSheet · LandmineBanner
+              CameraCapture · DictationField · ParentGate · ui.jsx
+  screens/    Today · Schedule · Jobs · Landmines · Rewards · Family · Review · Manage
 ```
+
+Landmine damage is recomputed from `armedAt` on every tick and diffed against what's
+already been applied, so reloading, backgrounding the app, or a double-fired timer can't
+double-charge anyone. Accrual is capped at 72 hours — a week away from the app shouldn't
+return a five-figure fine.
