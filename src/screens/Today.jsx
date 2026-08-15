@@ -4,6 +4,8 @@ import { Ring, Empty, Sheet } from '../components/ui.jsx'
 import ProofSheet from '../components/ProofSheet.jsx'
 import CheckInCard from '../components/CheckInCard.jsx'
 import BingoCard from '../components/BingoCard.jsx'
+import BossPanel from '../components/BossPanel.jsx'
+import { liveBoss } from '../lib/boss.js'
 import {
   choresOn, choreSubmission, eventsOn, dayStats, memberProgress,
   STATUS_META, jobsFor, jobSubmission, pendingApprovals,
@@ -52,9 +54,11 @@ export default function Today({ go }) {
   )
   const clashes = conflictsOn(state, me.id, date, chores)
 
+  const boss = liveBoss(state)
+
   const sections = buildSections({
     app, state, me, date, stats, chores, grouped, events, myJobs, queue, go,
-    setProof, setConfirmTask, dutiesToday, clashes,
+    setProof, setConfirmTask, dutiesToday, clashes, boss,
   })
 
   return (
@@ -93,6 +97,9 @@ export default function Today({ go }) {
       {/* Phone keeps its original top-to-bottom order; tablet splits the same
           blocks into two panes so the wide screen isn't one tall column. */}
       {sections.away}
+
+      {/* A live raid outranks everything — that's the point of it. */}
+      {sections.boss}
 
       {app.layout === 'tablet' ? (
         <div className="cols">
@@ -145,7 +152,7 @@ export default function Today({ go }) {
 }
 
 /** The stackable pieces of the Today screen, so each layout can order them. */
-function buildSections({ app, state, me, date, stats, chores, grouped, events, myJobs, queue, go, setProof, setConfirmTask, dutiesToday = [], clashes = [] }) {
+function buildSections({ app, state, me, date, stats, chores, grouped, events, myJobs, queue, go, setProof, setConfirmTask, dutiesToday = [], clashes = [], boss = null }) {
   return {
     nudge: app.isParentMode && queue.length > 0 && (
         <div className="card tap glow" style={{ marginTop: 12 }} onClick={() => go('review')}>
@@ -212,6 +219,13 @@ function buildSections({ app, state, me, date, stats, chores, grouped, events, m
     records: <CheckInCard member={me} />,
 
     bingo: <BingoCard member={me} />,
+
+    boss: boss && (
+      <>
+        <div className="section-title">⚔️ Boss battle</div>
+        <BossPanel boss={boss} member={me} />
+      </>
+    ),
 
     away: awayEventOn(state, me.id, date) && (
       <div className="card glow" style={{ marginTop: 12 }}>

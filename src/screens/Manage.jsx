@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useApp } from '../store/AppContext.jsx'
-import { Sheet, EmojiPicker, DayPicker, DangerButton } from '../components/ui.jsx'
+import { Sheet, EmojiPicker, DayPicker, DangerButton, timeAgo } from '../components/ui.jsx'
+import { SummonSheet } from '../components/BossPanel.jsx'
+import { liveBoss, bossHp, hpPct, damageBoard } from '../lib/boss.js'
 import CameraCapture from '../components/CameraCapture.jsx'
 import ParentGate from '../components/ParentGate.jsx'
 import { putPhoto, photoUrl } from '../lib/photos.js'
@@ -453,6 +455,83 @@ function AiTab() {
   )
 }
 
+/* ─────────────────────── boss battles ─────────────────────── */
+
+function BossAdmin({ app }) {
+  const [summoning, setSummoning] = useState(false)
+  const live = liveBoss(app.state)
+  const past = (app.state.bosses || []).filter((b) => b.status !== 'alive').slice(0, 6)
+
+  return (
+    <>
+      <div className="card">
+        {live ? (
+          <>
+            <div className="spread">
+              <div className="row">
+                <span style={{ fontSize: 26 }}>{live.emoji}</span>
+                <div>
+                  <b>{live.name}</b>
+                  <div className="tiny">{bossHp(live)} / {live.maxHp} HP · {hpPct(live)}%</div>
+                </div>
+              </div>
+              <DangerButton
+                className="btn no sm"
+                confirmLabel="Tap again to call it off"
+                onConfirm={() => app.retreatBoss(live.id, app.currentMember.id)}
+              >
+                🏳️ Call it off
+              </DangerButton>
+            </div>
+            <p className="muted" style={{ margin: '10px 0 0' }}>
+              A battle is live. It's showing at the top of everyone's Today screen.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Turn a big job into a monster with a health bar. Pick a fight, everyone attacks at once,
+              and whoever lands the last hit gets the bonus. Loot splits by damage dealt, so the
+              youngest still gets paid for what they actually did.
+            </p>
+            <button className="btn no wide" onClick={() => setSummoning(true)}>⚔️ Summon a boss</button>
+          </>
+        )}
+      </div>
+
+      {past.length > 0 && (
+        <>
+          <div className="tiny" style={{ margin: '14px 2px 8px' }}>BATTLE LOG</div>
+          <div className="card">
+            <div className="feed">
+              {past.map((b) => {
+                const mvp = damageBoard(b)[0]
+                const who = mvp && app.state.members.find((m) => m.id === mvp.memberId)
+                return (
+                  <div className="feeditem" key={b.id}>
+                    <span className="e">{b.status === 'slain' ? '🏆' : '🏳️'}</span>
+                    <span className="grow">
+                      <b>{b.name}</b>
+                      <div className="tiny">
+                        {b.status === 'slain'
+                          ? `Slain${who ? ` · MVP ${who.name} with ${mvp.damage}` : ''}`
+                          : 'Called off'}
+                      </div>
+                    </span>
+                    <span className="t">{b.slainAt ? timeAgo(b.slainAt) : ''}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </>
+      )}
+
+      <SummonSheet open={summoning} onClose={() => setSummoning(false)} app={app} me={app.currentMember} />
+    </>
+  )
+}
+
 /* ─────────────────────── landmine tuning ─────────────────────── */
 
 function LandmineSettings({ app }) {
@@ -568,6 +647,9 @@ function SettingsTab({ app }) {
           </p>
         )}
       </div>
+
+      <div className="section-title">⚔️ Boss battles</div>
+      <BossAdmin app={app} />
 
       <div className="section-title">💣 Family sabotage</div>
       <LandmineSettings app={app} />

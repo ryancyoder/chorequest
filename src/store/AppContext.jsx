@@ -13,6 +13,10 @@ import {
 import {
   buildCard, cardFor, weekStartOf, completedLines, isBlackout, REWARDS,
 } from '../lib/bingo.js'
+import {
+  bossHp, isSlain, cumulativeHeal, lootSplit, damageBoard, hitFlavour,
+  LAST_HIT_BONUS, DEFAULT_ENRAGE_HEAL,
+} from '../lib/boss.js'
 
 const Ctx = createContext(null)
 export const useApp = () => useContext(Ctx)
@@ -46,6 +50,7 @@ export function AppProvider({ children }) {
   const tickRef = useRef(null)
   tickRef.current = () => {
     api.tickLandmines()
+    api.tickBoss()
     api.ensureBingoCards()
   }
 
@@ -688,6 +693,173 @@ export function AppProvider({ children }) {
 
     removeFamilyGoal(id) {
       update((d) => { d.familyGoals = d.familyGoals.filter((g) => g.id !== id) })
+    },
+
+    /* ───────────────────────── ⚔️ boss battles ───────────────────────── */
+
+    summonBoss({ name, emoji, blurb = '', attacks, pot = 0, deadlineAt = null, enrageHeal = DEFAULT_ENRAGE_HEAL, createdBy }) {
+      let bossId = null
+      update((d) => {
+        bossId = uid('boss')
+        d.bosses.unshift({
+          id: bossId,
+          name, emoji, blurb,
+          maxHp: attacks.reduce((n, a) => n + a.damage, 0),
+          attacks: attacks.map((a, i) => ({
+            id: `atk_${i}_${Math.random().toString(36).slice(2, 7)}`,
+            title: a.title, emoji: a.emoji, damage: a.damage, weakPoint: !!a.weakPoint,
+            status: 'open',            // open | claimed | landed
+            claimedBy: null, landedBy: null, landedAt: null, photoId: null,
+          })),
+          pot: Number(pot) || 0,
+          healed: 0,
+          enrageHeal,
+          deadlineAt,
+          status: 'alive',             // alive | slain | fled
+          createdBy, createdAt: Date.now(),
+          slainAt: null, slainBy: null,
+        })
+        logActivity(d, createdBy, `summoned ${name}`, '⚔️')
+      })
+      celebrate({
+        emoji: emoji || '🐉',
+        title: `${name} has appeared`,
+        subtitle: 'Everyone to the garage. Attacks are on the board.',
+      })
+      return bossId
+    },
+
+    claimAttack(bossId, attackId, memberId) {
+      const member = state.members.find((m) => m.id === memberId)
+      update((d) => {
+        const a = d.bosses.find((b) => b.id === bossId)?.attacks.find((x) => x.id === attackId)
+        if (!a || a.status !== 'open') return
+        a.status = 'claimed'
+        a.claimedBy = memberId
+      })
+      notify(`${member?.name || 'You'} took it on`, '⚔️')
+    },
+
+    releaseAttack(bossId, attackId) {
+      update((d) => {
+        const a = d.bosses.find((b) => b.id === bossId)?.attacks.find((x) => x.id === attackId)
+        if (!a || a.status !== 'claimed') return
+        a.status = 'open'
+        a.claimedBy = null
+      })
+    },
+
+    /**
+     * Land a hit. Damage applies straight away — a raid is a live event with a
+     * parent in the room, and a review queue would kill it. Parents can undo.
+     */
+    landAttack(bossId, attackId, memberId, photoId = null) {
+      const boss = state.bosses.find((b) => b.id === bossId)
+      const attack = boss?.attacks.find((a) => a.id === attackId)
+      const member = state.members.find((m) => m.id === memberId)
+      if (!boss || !attack || attack.status === 'landed' || !member) return null
+
+      // What the bar will read once this hit lands.
+      const after = {
+        ...boss,
+        attacks: boss.attacks.map((a) => (a.id === attackId ? { ...a, status: 'landed', damage: attack.damage } : a)),
+      }
+      const newHp = bossHp(after)
+      const slain = isSlain(after)
+      const loot = slain ? lootSplit({ ...after, attacks: after.attacks.map((a) => a.id === attackId ? { ...a, landedBy: memberId } : a) }) : []
+      const mvp = slain ? damageBoard({ ...after, attacks: after.attacks.map((a) => a.id === attackId ? { ...a, landedBy: memberId } : a) })[0] : null
+
+      update((d) => {
+        const b = d.bosses.find((x) => x.id === bossId)
+        const a = b?.attacks.find((x) => x.id === attackId)
+        if (!b || !a || a.status === 'landed') return
+
+        a.status = 'landed'
+        a.landedBy = memberId
+        a.landedAt = Date.now()
+        a.photoId = photoId
+        a.claimedBy = memberId
+
+        // Damage is the reward — a 70-damage job is worth 70 points.
+        awardXp(d, memberId, a.damage)
+        logActivity(d, memberId, `hit ${b.name} for ${a.damage}`, '⚔️')
+
+        if (isSlain(b)) {
+          b.status = 'slain'
+          b.slainAt = Date.now()
+          b.slainBy = memberId
+
+          for (const share of loot) awardXp(d, share.memberId, 0, share.coins)
+          if (b.pot > 0) awardXp(d, memberId, 0, LAST_HIT_BONUS)
+          logActivity(d, memberId, `landed the killing blow on ${b.name}`, '🏆')
+        }
+      })
+
+      if (slain) {
+        celebrate({
+          emoji: '🏆',
+          title: `${boss.name} is DOWN`,
+          subtitle: mvp
+            ? `${member.name} landed the last hit. MVP: ${state.members.find((m) => m.id === mvp.memberId)?.name} with ${mvp.damage} damage.`
+            : `${member.name} landed the last hit.`,
+          color: member.color,
+        })
+      } else {
+        notify(`${hitFlavour(attack.damage)} — ${attack.damage} damage! ${newHp} HP left`, '⚔️')
+      }
+
+      return { damage: attack.damage, hp: newHp, slain }
+    },
+
+    /** Parent undo — the hit never happened. */
+    voidAttack(bossId, attackId, byMemberId) {
+      update((d) => {
+        const b = d.bosses.find((x) => x.id === bossId)
+        const a = b?.attacks.find((x) => x.id === attackId)
+        if (!b || !a || a.status !== 'landed') return
+        const who = a.landedBy
+        a.status = 'open'
+        a.landedBy = null
+        a.claimedBy = null
+        a.landedAt = null
+        // Take the points back off whoever claimed the hit.
+        const m = d.members.find((x) => x.id === who)
+        if (m) m.xp = Math.max(0, m.xp - a.damage)
+        if (b.status === 'slain' && !isSlain(b)) {
+          b.status = 'alive'
+          b.slainAt = null
+          b.slainBy = null
+        }
+        logActivity(d, byMemberId, `took back a hit on ${b.name}`, '↩️')
+      })
+      notify('Hit reversed', '↩️')
+    },
+
+    retreatBoss(bossId, byMemberId) {
+      update((d) => {
+        const b = d.bosses.find((x) => x.id === bossId)
+        if (!b) return
+        b.status = 'fled'
+        b.slainAt = Date.now()
+        logActivity(d, byMemberId, `called off ${b.name}`, '🏳️')
+      })
+      notify('Battle called off', '🏳️')
+    },
+
+    /** Past its deadline the boss heals — nothing motivates like losing ground. */
+    tickBoss() {
+      const live = (state.bosses || []).filter((b) => b.status === 'alive' && b.deadlineAt)
+      if (!live.length) return
+      const now = Date.now()
+      const due = live.some((b) => cumulativeHeal(b, now) > (b.healed || 0))
+      if (!due) return
+      update((d) => {
+        for (const b of d.bosses) {
+          if (b.status !== 'alive' || !b.deadlineAt) continue
+          const heal = cumulativeHeal(b, now)
+          if (heal > (b.healed || 0)) b.healed = heal
+        }
+      })
     },
 
     /* ───────────────────────── 🎱 chore bingo ───────────────────────── */
