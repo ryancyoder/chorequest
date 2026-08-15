@@ -161,6 +161,18 @@ export function buildSeed() {
       { id: 'pr2', memberId: 'm4', trackId: 't3', title: 'No snapping when I get frustrated', emoji: '😤', kind: 'vice', value: 3, comeback: true, at: Date.now() - 30 * 3600e3, cheers: [] },
     ],
     familyRecord: { best: 54, bestAt: Date.now() - 4 * 86400e3 },
+    // A few already on the wall, so the idea reads immediately.
+    stars: [
+      { id: 'st1', toId: 'm6', fromId: 'm3', category: 'kindness', points: 15, status: 'confirmed',
+        text: 'Helped Rosie with her shoes when she was melting down', photoId: null,
+        createdAt: Date.now() - 5 * 3600e3, dateISO: addDays(t, -1), decidedAt: Date.now() - 4 * 3600e3, decidedBy: 'm2' },
+      { id: 'st2', toId: 'm4', fromId: 'm1', category: 'respect', points: 20, status: 'confirmed',
+        text: 'Took a no about the sleepover without one word of argument', photoId: null,
+        createdAt: Date.now() - 30 * 3600e3, dateISO: addDays(t, -1), decidedAt: Date.now() - 30 * 3600e3, decidedBy: 'm1' },
+      { id: 'st3', toId: 'm5', fromId: 'm7', category: 'chivalry', points: 20, status: 'confirmed',
+        text: 'Carried my backpack the whole way home', photoId: null,
+        createdAt: Date.now() - 52 * 3600e3, dateISO: addDays(t, -2), decidedAt: Date.now() - 52 * 3600e3, decidedBy: 'm2' },
+    ],
     bingoCards: [], // dealt for everyone at boot
     bosses: [],     // summoned by a parent when a big job needs the whole family
 

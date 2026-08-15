@@ -593,6 +593,37 @@ label.field > span { display: block; font-size: 12px; font-weight: 800; text-tra
   50% { box-shadow: 0 0 0 14px #ff5c6c00; }
 }
 
+/* ═══════════════════════ ⭐ gold stars ═══════════════════════ */
+
+.starcta {
+  background: linear-gradient(135deg, #ffd60a, #ff9f1c);
+  color: #2a1c00; border-color: transparent;
+  box-shadow: 0 10px 26px #ffd60a44;
+}
+
+.star { border-left: 4px solid var(--gold); }
+.star.kindness { border-left-color: #ffd60a; }
+.star.chivalry { border-left-color: #4cc9f0; }
+.star.respect  { border-left-color: #63e6a5; }
+
+.starpic {
+  width: 58px; height: 58px; flex: 0 0 auto; border-radius: 14px; object-fit: cover;
+  border: 1px solid var(--line);
+}
+.starpic.placeholder {
+  display: grid; place-items: center; font-size: 26px;
+  background: linear-gradient(150deg, #ffd60a22, rgba(0,0,0,.3));
+}
+
+.starcat { transition: .16s; }
+.starcat.on {
+  border-color: var(--gold);
+  background: linear-gradient(120deg, #ffd60a1c, var(--card));
+}
+
+.starrow { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.starrow:last-child { border-bottom: none; }
+
 .sagalink {
   border-left: 4px solid var(--gold);
   background: linear-gradient(100deg, #ffd60a14, var(--card));

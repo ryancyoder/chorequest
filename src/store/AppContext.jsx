@@ -17,6 +17,7 @@ import {
   bossHp, isSlain, cumulativeHeal, lootSplit, damageBoard, hitFlavour,
   LAST_HIT_BONUS, DEFAULT_ENRAGE_HEAL,
 } from '../lib/boss.js'
+import { categoryOf, canAward, SPOTTER_XP } from '../lib/kindness.js'
 
 const Ctx = createContext(null)
 export const useApp = () => useContext(Ctx)
@@ -118,6 +119,25 @@ export function AppProvider({ children }) {
       g.progress = Math.min(g.target, g.progress + Math.max(0, amount))
       if (g.progress >= g.target) g.achievedAt = Date.now()
     })
+  }
+
+  /** Pay out a confirmed star: the recipient, and a little for noticing. */
+  function settleStar(draft, star){
+    if(!star || star.status !== 'confirmed') return
+    const cat = categoryOf(star.category)
+    awardXp(draft, star.toId, star.points)
+    awardXp(draft, star.fromId, SPOTTER_XP)
+
+    const to = draft.members.find((m) => m.id === star.toId)
+    const from = draft.members.find((m) => m.id === star.fromId)
+    if(to) to.starsReceived = (to.starsReceived || 0) + 1
+    if(from) from.starsGiven = (from.starsGiven || 0) + 1
+
+    logActivity(
+      draft, star.toId,
+      star.text ? `earned a ${cat.label} star — “${star.text}”` : `earned a ${cat.label} star`,
+      cat.emoji,
+    )
   }
 
   /**
@@ -693,6 +713,93 @@ export function AppProvider({ children }) {
 
     removeFamilyGoal(id) {
       update((d) => { d.familyGoals = d.familyGoals.filter((g) => g.id !== id) })
+    },
+
+    /* ───────────────────────── ⭐ gold stars ───────────────────────── */
+
+    /**
+     * Catch someone being good. A kid's star waits for a parent to confirm;
+     * a parent's lands straight away — the confirmation step is there to keep
+     * siblings honest, not to check the grown-up holding the phone.
+     */
+    awardStar({ toId, fromId, category, text, photoId = null, points }) {
+      const from = state.members.find((m) => m.id === fromId)
+      const gate = canAward(state, from, toId)
+      if (!gate.ok) {
+        notify(gate.why, '⭐')
+        return { ok: false, why: gate.why }
+      }
+
+      const cat = categoryOf(category)
+      const isParent = from.role === 'parent'
+      const value = Number(points) || cat.points
+
+      update((d) => {
+        d.stars.unshift({
+          id: uid('star'),
+          toId, fromId,
+          category: cat.key,
+          text: (text || '').trim(),
+          photoId,
+          points: value,
+          status: isParent ? 'confirmed' : 'pending',
+          createdAt: Date.now(),
+          dateISO: todayISO(),
+          decidedAt: isParent ? Date.now() : null,
+          decidedBy: isParent ? fromId : null,
+        })
+        d.stars = d.stars.slice(0, 120)
+
+        if (isParent) settleStar(d, d.stars[0])
+      })
+
+      const to = state.members.find((m) => m.id === toId)
+      if (isParent) {
+        celebrate({
+          emoji: cat.emoji,
+          title: `${cat.label} — ${to?.name}`,
+          subtitle: (text || '').trim() || `${from.name} caught ${to?.name} being good. +${value} points.`,
+          color: to?.color,
+        })
+      } else {
+        notify(`Sent to a parent to confirm — nice catch, ${from.name}`, '⭐')
+      }
+      return { ok: true }
+    },
+
+    confirmStar(starId, byMemberId) {
+      const star = (state.stars || []).find((s) => s.id === starId)
+      if (!star || star.status !== 'pending') return
+      const to = state.members.find((m) => m.id === star.toId)
+      const from = state.members.find((m) => m.id === star.fromId)
+      const cat = categoryOf(star.category)
+
+      update((d) => {
+        const s = d.stars.find((x) => x.id === starId)
+        if (!s || s.status !== 'pending') return
+        s.status = 'confirmed'
+        s.decidedAt = Date.now()
+        s.decidedBy = byMemberId
+        settleStar(d, s)
+      })
+
+      celebrate({
+        emoji: cat.emoji,
+        title: `${cat.label} — ${to?.name}`,
+        subtitle: `${from?.name} noticed. +${star.points} points, and it's on the wall for good.`,
+        color: to?.color,
+      })
+    },
+
+    declineStar(starId, byMemberId) {
+      update((d) => {
+        const s = d.stars.find((x) => x.id === starId)
+        if (!s) return
+        s.status = 'declined'
+        s.decidedAt = Date.now()
+        s.decidedBy = byMemberId
+      })
+      notify('Left off the wall', '⭐')
     },
 
     /* ───────────────────────── ⚔️ boss battles ───────────────────────── */

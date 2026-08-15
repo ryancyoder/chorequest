@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useApp } from '../store/AppContext.jsx'
 import { Sheet, Ring, timeAgo } from '../components/ui.jsx'
 import RecordsPanel from '../components/RecordsPanel.jsx'
+import KindnessWall from '../components/KindnessWall.jsx'
 import { leaderboard, byId, dayStats, memberProgress } from '../store/selectors.js'
 import { BADGES } from '../lib/gamify.js'
 import { todayISO } from '../lib/date.js'
@@ -105,6 +106,8 @@ export default function Family({ go }) {
           <span style={{ fontSize: 20, opacity: .5 }}>›</span>
         </div>
       </a>
+
+      <KindnessWall />
 
       <RecordsPanel />
 

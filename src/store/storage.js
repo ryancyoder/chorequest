@@ -10,6 +10,7 @@ function migrate(state) {
   const s = { ...state }
 
   s.landmines = Array.isArray(s.landmines) ? s.landmines : []
+  s.stars = Array.isArray(s.stars) ? s.stars : []
   s.bosses = Array.isArray(s.bosses) ? s.bosses : []
   s.bingoCards = Array.isArray(s.bingoCards) ? s.bingoCards : []
   s.tracks = Array.isArray(s.tracks) ? s.tracks : []
@@ -35,7 +36,7 @@ function migrate(state) {
 
   s.members = (s.members || []).map((m) => ({
     badges: [], totalApproved: 0, jobsDone: 0, perfectScores: 0,
-    escrowXp: 0, escrowCoins: 0,
+    escrowXp: 0, escrowCoins: 0, starsReceived: 0, starsGiven: 0,
     ...m,
   }))
 

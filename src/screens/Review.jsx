@@ -6,6 +6,7 @@ import { byId, pendingApprovals, submissionTitle, submissionEmoji } from '../sto
 import { relativeDay } from '../lib/date.js'
 import { timeAgo } from '../components/ui.jsx'
 import ParentGate from '../components/ParentGate.jsx'
+import { StarQueue } from '../components/KindnessWall.jsx'
 
 export default function Review() {
   const app = useApp()
@@ -81,6 +82,8 @@ export default function Review() {
 
       </div>
       <div className="col">
+
+      <StarQueue />
 
       {recent.length > 0 && (
         <>
