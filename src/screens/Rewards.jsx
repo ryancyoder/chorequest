@@ -30,7 +30,7 @@ export default function Rewards() {
       {tab === 'prizes' && (
         <>
           <div className="section-title">Yours to earn <span className="count">{forMe.length}</span></div>
-          <div className="stack">
+          <div className="stack cards">
             {forMe.length === 0 && <Empty emoji="🎁" title="No prizes set yet">A parent can add long-term prizes.</Empty>}
             {forMe
               .slice()
@@ -71,7 +71,7 @@ export default function Rewards() {
           {others.length > 0 && (
             <>
               <div className="section-title">Everyone else's goals</div>
-              <div className="stack">
+              <div className="stack cards">
                 {others.map((p) => {
                   const owner = byId(state.members, p.memberId)
                   return (
@@ -104,7 +104,7 @@ export default function Rewards() {
             Every point anyone earns pushes these bars forward.
           </p>
 
-          <div className="stack">
+          <div className="stack cards">
             {state.familyGoals.length === 0 && <Empty emoji="🏆" title="No family goals yet">Set one everyone can chase.</Empty>}
             {state.familyGoals.map((g) => {
               const pct = Math.min(100, Math.round((g.progress / g.target) * 100))

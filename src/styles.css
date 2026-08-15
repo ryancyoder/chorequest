@@ -562,6 +562,189 @@ label.field > span { display: block; font-size: 12px; font-weight: 800; text-tra
   50% { box-shadow: 0 0 0 14px #ff5c6c00; }
 }
 
+/* ═══════════════════════ tablet / iPad landscape ═══════════════════════ */
+
+/* Two-column panes. On phone they simply stack, so screens use one markup. */
+.cols { display: flex; flex-direction: column; gap: 12px; }
+.col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+.app.tablet {
+  max-width: none;
+  padding-bottom: 0;
+  display: grid;
+  grid-template-columns: 268px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.app.tablet .cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.app.tablet .cols.even { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+
+/* card lists become grids so wide screens don't show one lonely column */
+.app.tablet .stack.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.app.tablet .screen { padding: 0; animation: none; }
+/* The tablet header already names the screen — drop each screen's own title so
+   the fold isn't spent saying "Schedule" twice. */
+.app.tablet .screen h1 { display: none; }
+.app.tablet .content { padding: 20px 26px 44px; min-width: 0; }
+.app.tablet .section-title { margin-top: 24px; }
+.app.tablet .task .ttl { font-size: 16px; }
+.app.tablet .fab { bottom: 26px; right: 26px; }
+
+/* sidebar rail */
+.rail {
+  position: sticky; top: 0; align-self: start;
+  height: 100vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 16px 12px calc(16px + var(--safe-b));
+  background: rgba(11, 9, 28, .72);
+  backdrop-filter: blur(20px);
+  border-right: 1px solid var(--line);
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.rail::-webkit-scrollbar { display: none; }
+
+/* Wide scroll areas keep a scrollbar, just a quiet one. */
+.matrix::-webkit-scrollbar { height: 9px; }
+.matrix::-webkit-scrollbar-track { background: transparent; }
+.matrix::-webkit-scrollbar-thumb { background: var(--line); border-radius: 99px; }
+
+.railnav { display: flex; flex-direction: column; gap: 3px; }
+.railnav button {
+  display: flex; align-items: center; gap: 11px;
+  padding: 11px 12px; border-radius: 14px;
+  font-size: 14.5px; font-weight: 800; color: var(--ink-dim);
+  transition: .16s; text-align: left;
+}
+.railnav button i { font-style: normal; font-size: 19px; }
+.railnav button:hover { background: var(--card); color: var(--ink); }
+.railnav button.on {
+  background: color-mix(in srgb, var(--member) 26%, transparent);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--member) 45%, transparent);
+}
+.railbadge {
+  min-width: 21px; height: 21px; padding: 0 6px; border-radius: 99px;
+  background: var(--bad); color: #fff; font-size: 11px; font-weight: 800;
+  display: grid; place-items: center;
+}
+
+.railsection {
+  font-size: 10.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-faint); padding: 6px 12px 0;
+}
+.railmembers { display: flex; flex-direction: column; gap: 4px; }
+.railmember {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: 14px; border: 1px solid transparent;
+  transition: .16s; width: 100%;
+}
+.railmember:hover { background: var(--card); }
+.railmember.on {
+  background: color-mix(in srgb, var(--c) 20%, transparent);
+  border-color: color-mix(in srgb, var(--c) 55%, transparent);
+}
+.railmember .face { font-size: 22px; }
+.railmember .nm { display: block; font-size: 13.5px; font-weight: 800; color: var(--ink); }
+.railmember .mini { display: block; font-size: 10.5px; font-weight: 700; color: var(--ink-faint); }
+.railmember .tally { font-size: 11px; font-weight: 800; color: var(--ink-dim); }
+.railbar {
+  display: block; height: 4px; border-radius: 99px; background: rgba(0,0,0,.4);
+  margin-top: 5px; overflow: hidden;
+}
+.railbar > i { display: block; height: 100%; border-radius: 99px; background: var(--c); transition: width .7s; }
+
+.railfoot { margin-top: auto; display: flex; flex-direction: column; gap: 6px; padding-top: 12px; }
+
+/* content header */
+.tablethead {
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 16px;
+  flex-wrap: wrap; margin-bottom: 18px;
+}
+
+/* the week matrix — the reason an iPad earns its place on the counter */
+.matrix { overflow-x: auto; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--card); }
+/* Sized so all seven days fit without horizontal scrolling on an iPad in
+   landscape — today's column being off-screen defeats the whole view. */
+.matrixgrid { display: grid; grid-template-columns: 126px repeat(7, minmax(86px, 1fr)); min-width: 728px; }
+.matrixgrid > * { border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); padding: 7px 7px; }
+.matrixgrid > *:nth-child(8n) { border-right: none; }
+.matrixhead {
+  position: sticky; top: 0; z-index: 2; background: rgba(20, 16, 43, .96);
+  backdrop-filter: blur(10px); text-align: center;
+}
+.matrixhead .w { font-size: 10px; font-weight: 800; letter-spacing: .08em; color: var(--ink-faint); text-transform: uppercase; }
+.matrixhead .d { font-size: 17px; font-weight: 800; font-family: 'Baloo 2', sans-serif; }
+.matrixhead.today { background: color-mix(in srgb, var(--gold) 16%, rgba(20,16,43,.96)); }
+.matrixhead.today .d { color: var(--gold); }
+
+.matrixname {
+  position: sticky; left: 0; z-index: 1;
+  display: flex; align-items: center; gap: 9px;
+  background: rgba(17, 13, 37, .97); border-left: 4px solid var(--c, var(--member));
+}
+.matrixname .face { font-size: 21px; }
+.matrixname .nm { font-size: 13.5px; font-weight: 800; }
+.matrixname .mini { font-size: 10px; color: var(--ink-faint); font-weight: 700; }
+
+.matrixcell { display: flex; flex-direction: column; gap: 3px; min-height: 62px; transition: background .15s; }
+.matrixcell:hover { background: var(--card-2); cursor: pointer; }
+.matrixcell.today { background: color-mix(in srgb, var(--gold) 7%, transparent); }
+.matrixcell .bit {
+  font-size: 10px; font-weight: 700; line-height: 1.25;
+  padding: 3px 5px; border-radius: 7px; background: rgba(0,0,0,.32);
+  border-left: 2px solid var(--c, var(--member));
+  /* Two lines beats an ellipsis — this is meant to be read from across the room. */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; word-break: break-word;
+}
+.matrixcell .bit.evt { border-left-color: var(--accent-2); }
+.matrixcell .bit.done { opacity: .45; text-decoration: line-through; }
+.matrixcell .more { font-size: 9.5px; color: var(--ink-faint); font-weight: 800; padding-left: 4px; }
+
+/* week columns for a single member */
+.weekcols { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; align-items: start; }
+.weekcol { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 9px 8px; min-height: 130px; }
+.weekcol.today { border-color: color-mix(in srgb, var(--gold) 50%, transparent); background: color-mix(in srgb, var(--gold) 8%, var(--card)); }
+.weekcol .hd { text-align: center; margin-bottom: 8px; }
+.weekcol .hd .w { font-size: 9.5px; font-weight: 800; color: var(--ink-faint); text-transform: uppercase; letter-spacing: .07em; }
+.weekcol .hd .d { font-size: 16px; font-weight: 800; font-family: 'Baloo 2', sans-serif; }
+
+/* sheets become centered dialogs rather than bottom sheets */
+.app.tablet ~ .backdrop, .backdrop.wide { align-items: center; }
+.app.tablet .hero { padding: 22px 24px; }
+.app.tablet .hero .who { font-size: 29px; }
+
+/* Narrower tablets (iPad mini / 10.2" landscape) — buy back sidebar width. */
+@media (max-width: 1120px) {
+  .app.tablet { grid-template-columns: 228px minmax(0, 1fr); }
+  .app.tablet .content { padding: 16px 18px 40px; }
+}
+
+@media (min-width: 900px) {
+  .backdrop { align-items: center; }
+  .sheet {
+    width: min(660px, 92vw);
+    max-height: 88vh;
+    border-radius: 26px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 24px;
+    animation: pop .26s cubic-bezier(.2,.9,.3,1);
+  }
+  .toast { bottom: 26px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 }

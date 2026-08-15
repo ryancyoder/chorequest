@@ -43,6 +43,9 @@ export default function Family({ go }) {
         </div>
       </div>
 
+      <div className="cols">
+      <div className="col">
+
       <div className="section-title">🏆 Leaderboard</div>
 
       {podium.length === 3 && (
@@ -83,6 +86,9 @@ export default function Family({ go }) {
         })}
       </div>
 
+      </div>
+      <div className="col">
+
       <div className="section-title">📣 What's been happening</div>
       <div className="card">
         <div className="feed">
@@ -98,6 +104,9 @@ export default function Family({ go }) {
           })}
           {state.activity.length === 0 && <p className="muted center" style={{ padding: 12 }}>Nothing yet — get a chore approved to start the feed.</p>}
         </div>
+      </div>
+
+      </div>
       </div>
 
       <MemberSheet member={open} onClose={() => setOpen(null)} />

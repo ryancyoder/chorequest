@@ -3,7 +3,7 @@ import { useApp } from './store/AppContext.jsx'
 import { Confetti } from './components/ui.jsx'
 import { BADGES } from './lib/gamify.js'
 import { dayStats, pendingApprovals, memberProgress } from './store/selectors.js'
-import { todayISO } from './lib/date.js'
+import { todayISO, prettyDate } from './lib/date.js'
 
 import Today from './screens/Today.jsx'
 import Schedule from './screens/Schedule.jsx'
@@ -26,8 +26,9 @@ export default function App() {
   const [tab, setTab] = useState('today')
   const me = app.currentMember
   const queue = pendingApprovals(app.state)
+  const tablet = app.layout === 'tablet'
 
-  // Keep the accent color in sync with whoever is holding the phone.
+  // Keep the accent color in sync with whoever is holding the device.
   useEffect(() => {
     document.documentElement.style.setProperty('--member', me.color)
   }, [me.color])
@@ -54,57 +55,31 @@ export default function App() {
   }
 
   return (
-    <div className="app" style={{ '--member': me.color }}>
-      <header className="topbar">
-        <div className="spread">
-          <div className="brand"><span className="dot" /> ChoreQuest</div>
-          <div className="row">
-            {app.isParentMode && (
-              <button className="btn sm" onClick={() => setTab('review')}>
-                📋 Review{queue.length > 0 && ` · ${queue.length}`}
-              </button>
-            )}
-            {me.role === 'parent' && !app.isParentMode && (
-              <button className="btn sm ghost" onClick={() => setTab('review')}>🔐 Parent mode</button>
-            )}
-          </div>
-        </div>
+    <div className={`app ${tablet ? 'tablet' : 'phone'}`} style={{ '--member': me.color }}>
+      {tablet ? (
+        <Rail tab={tab} setTab={setTab} queue={queue} app={app} me={me} />
+      ) : (
+        <PhoneBar tab={tab} setTab={setTab} queue={queue} app={app} me={me} />
+      )}
 
-        <div className="memberstrip">
-          {app.state.members.map((m) => {
-            const st = dayStats(app.state, m.id, todayISO())
-            const prog = memberProgress(m)
-            return (
-              <button
-                key={m.id}
-                className={`chipmember ${m.id === me.id ? 'on' : ''}`}
-                style={{ '--c': m.color }}
-                onClick={() => app.switchMember(m.id)}
-              >
-                <span className="face">{m.emoji}</span>
-                <span className="nm">{m.name}</span>
-                <span className="mini">
-                  {m.role === 'child' ? `Lv${prog.level} · ${st.done}/${st.total}` : '👑'}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      </header>
+      <main className="content">
+        {tablet && <TabletHeader tab={tab} me={me} app={app} queue={queue} setTab={setTab} />}
+        {screens[tab]}
+      </main>
 
-      {screens[tab]}
-
-      <nav className="nav">
-        {TABS.map((t) => (
-          <button key={t.key} className={tab === t.key ? 'on' : ''} onClick={() => setTab(t.key)}>
-            <i>{t.icon}</i>
-            {t.label}
-            {t.key === 'family' && app.isParentMode && queue.length > 0 && (
-              <span className="dotbadge">{queue.length}</span>
-            )}
-          </button>
-        ))}
-      </nav>
+      {!tablet && (
+        <nav className="nav">
+          {TABS.map((t) => (
+            <button key={t.key} className={tab === t.key ? 'on' : ''} onClick={() => setTab(t.key)}>
+              <i>{t.icon}</i>
+              {t.label}
+              {t.key === 'family' && app.isParentMode && queue.length > 0 && (
+                <span className="dotbadge">{queue.length}</span>
+              )}
+            </button>
+          ))}
+        </nav>
+      )}
 
       {app.toast && (
         <div className="toast" key={app.toast.at}>
@@ -117,6 +92,160 @@ export default function App() {
     </div>
   )
 }
+
+/* ─────────────────────────── phone chrome ─────────────────────────── */
+
+function PhoneBar({ tab, setTab, queue, app, me }) {
+  return (
+    <header className="topbar">
+      <div className="spread">
+        <div className="brand"><span className="dot" /> ChoreQuest</div>
+        <div className="row">
+          {app.isParentMode && (
+            <button className="btn sm" onClick={() => setTab('review')}>
+              📋 Review{queue.length > 0 && ` · ${queue.length}`}
+            </button>
+          )}
+          {me.role === 'parent' && !app.isParentMode && (
+            <button className="btn sm ghost" onClick={() => setTab('review')}>🔐 Parent mode</button>
+          )}
+        </div>
+      </div>
+
+      <div className="memberstrip">
+        {app.state.members.map((m) => {
+          const st = dayStats(app.state, m.id, todayISO())
+          const prog = memberProgress(m)
+          return (
+            <button
+              key={m.id}
+              className={`chipmember ${m.id === me.id ? 'on' : ''}`}
+              style={{ '--c': m.color }}
+              onClick={() => app.switchMember(m.id)}
+            >
+              <span className="face">{m.emoji}</span>
+              <span className="nm">{m.name}</span>
+              <span className="mini">
+                {m.role === 'child' ? `Lv${prog.level} · ${st.done}/${st.total}` : '👑'}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </header>
+  )
+}
+
+/* ─────────────────────────── tablet chrome ─────────────────────────── */
+
+function Rail({ tab, setTab, queue, app, me }) {
+  const items = [...TABS]
+  if (app.isParentMode) items.push({ key: 'review', icon: '📋', label: 'Review', badge: queue.length })
+
+  return (
+    <aside className="rail">
+      <div className="brand" style={{ padding: '6px 8px 2px' }}>
+        <span className="dot" /> ChoreQuest
+      </div>
+
+      <nav className="railnav">
+        {items.map((t) => (
+          <button key={t.key} className={tab === t.key ? 'on' : ''} onClick={() => setTab(t.key)}>
+            <i>{t.icon}</i>
+            <span className="grow">{t.label}</span>
+            {t.badge > 0 && <span className="railbadge">{t.badge}</span>}
+          </button>
+        ))}
+      </nav>
+
+      <div className="railsection">Who's using it</div>
+      <div className="railmembers">
+        {app.state.members.map((m) => {
+          const st = dayStats(app.state, m.id, todayISO())
+          const prog = memberProgress(m)
+          return (
+            <button
+              key={m.id}
+              className={`railmember ${m.id === me.id ? 'on' : ''}`}
+              style={{ '--c': m.color }}
+              onClick={() => app.switchMember(m.id)}
+            >
+              <span className="face">{m.emoji}</span>
+              <span className="grow" style={{ textAlign: 'left' }}>
+                <span className="nm">{m.name}</span>
+                <span className="mini">
+                  {m.role === 'parent' ? '👑 Parent' : `Lv ${prog.level} · 🔥 ${m.streak}`}
+                </span>
+                {m.role === 'child' && (
+                  <span className="railbar"><i style={{ width: `${st.pct}%` }} /></span>
+                )}
+              </span>
+              {m.role === 'child' && <span className="tally">{st.done}/{st.total}</span>}
+            </button>
+          )
+        })}
+      </div>
+
+      <div className="railfoot">
+        {me.role === 'parent' && !app.isParentMode && (
+          <button className="btn sm wide ghost" onClick={() => setTab('review')}>🔐 Parent mode</button>
+        )}
+        {app.isParentMode && (
+          <>
+            <button className="btn sm wide ghost" onClick={() => setTab('manage')}>⚙️ Manage</button>
+            <button className="btn sm wide ghost" onClick={app.lockParent}>🔒 Lock</button>
+          </>
+        )}
+        <button
+          className="btn sm wide ghost"
+          onClick={() => app.setLayoutPref(app.layoutPref === 'phone' ? 'auto' : 'phone')}
+          title="Switch to the phone layout"
+        >
+          📱 Phone layout
+        </button>
+      </div>
+    </aside>
+  )
+}
+
+function TabletHeader({ tab, me, app, queue, setTab }) {
+  const st = dayStats(app.state, me.id, todayISO())
+  return (
+    <div className="tablethead">
+      <div>
+        <div className="tiny">{prettyDate(todayISO())}</div>
+        <h1 style={{ fontSize: 27, marginTop: 2 }}>
+          {tab === 'today' ? `${me.emoji} ${me.name}'s day` : TITLES[tab] || 'ChoreQuest'}
+        </h1>
+      </div>
+      <div className="row">
+        {me.role === 'child' && (
+          <>
+            <span className="pill fire">🔥 {me.streak} <small>streak</small></span>
+            <span className="pill coin">🪙 {me.coins}</span>
+            <span className="pill">✅ {st.done}/{st.total} <small>today</small></span>
+          </>
+        )}
+        {app.isParentMode && queue.length > 0 && tab !== 'review' && (
+          <button className="btn sm primary" onClick={() => setTab('review')}>
+            📋 {queue.length} to review
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const TITLES = {
+  schedule: 'Family schedule',
+  jobs: 'Job board',
+  rewards: 'Rewards',
+  family: 'Family',
+  review: 'Review queue',
+  manage: 'Manage',
+}
+
+/* ─────────────────────────── celebration ─────────────────────────── */
 
 function Celebration({ data, onClose }) {
   useEffect(() => {

@@ -4,6 +4,7 @@ import { loadState, saveState, clearState } from './storage.js'
 import { hydratePhotos, clearPhotos } from '../lib/photos.js'
 import { todayISO, addDays } from '../lib/date.js'
 import { earnedBadges, streakMultiplier, levelFromXp } from '../lib/gamify.js'
+import { useWideViewport, resolveLayout } from '../lib/layout.js'
 
 const Ctx = createContext(null)
 export const useApp = () => useContext(Ctx)
@@ -17,6 +18,12 @@ export function AppProvider({ children }) {
   const [toast, setToast] = useState(null)
   const [celebration, setCelebration] = useState(null) // {title, subtitle, emoji}
   const toastTimer = useRef(null)
+
+  // Layout resolves from the saved preference plus the live viewport, so an iPad
+  // rotating into landscape switches over on its own.
+  const wideViewport = useWideViewport()
+  const layoutPref = state.settings.layoutMode ?? 'auto'
+  const layout = resolveLayout(layoutPref, wideViewport)
 
   useEffect(() => {
     hydratePhotos().finally(() => setReady(true))
@@ -58,6 +65,14 @@ export function AppProvider({ children }) {
     notify,
     celebration,
     dismissCelebration: () => setCelebration(null),
+
+    /** 'phone' | 'tablet' — what's actually on screen right now. */
+    layout,
+    /** 'auto' | 'phone' | 'tablet' — what the family chose. */
+    layoutPref,
+    setLayoutPref(pref) {
+      update((d) => { d.settings.layoutMode = pref })
+    },
 
     get currentMember() {
       return state.members.find((m) => m.id === state.settings.currentMemberId) || state.members[0]
@@ -441,6 +456,6 @@ export function AppProvider({ children }) {
     },
   }
 
-  const value = useMemo(() => api, [state, ready, toast, celebration])
+  const value = useMemo(() => api, [state, ready, toast, celebration, layout, layoutPref])
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

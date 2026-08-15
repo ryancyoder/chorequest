@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useApp } from '../store/AppContext.jsx'
 import { Empty, Sheet, DayPicker, EmojiPicker, DangerButton } from '../components/ui.jsx'
-import { choresOn, eventsOn, choreSubmission, dayStats } from '../store/selectors.js'
+import { choresOn, eventsOn, choreSubmission, dayStats, memberProgress } from '../store/selectors.js'
 import { todayISO, weekOf, fromISO, DAY_NAMES, pretty12, relativeDay, addDays } from '../lib/date.js'
 
 export default function Schedule() {
@@ -27,8 +27,8 @@ export default function Schedule() {
         </div>
       </div>
 
-      {/* week strip */}
-      <div className="weekstrip">
+      {/* week strip — the tablet grids show the whole week already */}
+      <div className="weekstrip" style={{ display: app.layout === 'tablet' ? 'none' : undefined }}>
         {week.map((iso) => {
           const d = fromISO(iso)
           const load = who === 'all'
@@ -65,9 +65,27 @@ export default function Schedule() {
         ))}
       </div>
 
-      <div className="section-title">{relativeDay(date)}</div>
+      <div className="section-title">
+        {app.layout === 'tablet'
+          ? (who === 'all' ? 'The whole week' : `${state.members.find((m) => m.id === who)?.name}'s week`)
+          : relativeDay(date)}
+      </div>
 
-      {who === 'all' ? (
+      {app.layout === 'tablet' ? (
+        who === 'all' ? (
+          <WeekMatrix
+            state={state}
+            week={week}
+            onPick={(memberId, iso) => { setWho(memberId); setDate(iso) }}
+          />
+        ) : (
+          <>
+            <MemberWeek state={state} memberId={who} week={week} onPick={setDate} />
+            <div className="section-title">{relativeDay(date)} in detail</div>
+            <MemberDay state={state} memberId={who} date={date} onEdit={setEditing} canEdit={app.isParentMode} />
+          </>
+        )
+      ) : who === 'all' ? (
         <div className="stack">
           {state.members.map((m) => {
             const evts = eventsOn(state, m.id, date)
@@ -133,6 +151,119 @@ export default function Schedule() {
         onDelete={(id) => { app.removeEvent(id); setEditing(null) }}
         members={state.members}
       />
+    </div>
+  )
+}
+
+/**
+ * The whole household's week in one grid — members down the side, days across.
+ * This is the view that makes a landscape iPad on the kitchen counter worth it.
+ */
+function WeekMatrix({ state, week, onPick }) {
+  const today = todayISO()
+
+  return (
+    <div className="matrix">
+      <div className="matrixgrid">
+        <div className="matrixhead" />
+        {week.map((iso) => {
+          const d = fromISO(iso)
+          return (
+            <div key={iso} className={`matrixhead ${iso === today ? 'today' : ''}`}>
+              <div className="w">{DAY_NAMES[d.getDay()]}</div>
+              <div className="d">{d.getDate()}</div>
+            </div>
+          )
+        })}
+
+        {state.members.map((m) => (
+          <Fragment key={m.id}>
+            <div className="matrixname" style={{ '--c': m.color }}>
+              <span className="face">{m.emoji}</span>
+              <span>
+                <div className="nm">{m.name}</div>
+                <div className="mini">
+                  {m.role === 'parent' ? '👑 Parent' : `Lv ${memberProgress(m).level} · 🔥 ${m.streak}`}
+                </div>
+              </span>
+            </div>
+
+            {week.map((iso) => {
+              const evts = eventsOn(state, m.id, iso)
+              const chs = choresOn(state, m.id, iso)
+              const bits = [
+                ...evts.map((e) => ({ key: e.id, cls: 'evt', label: `${e.emoji} ${e.title}`, done: false })),
+                ...chs.map((c) => ({
+                  key: c.id,
+                  cls: '',
+                  label: `${c.emoji} ${c.title}`,
+                  done: choreSubmission(state, c.id, iso)?.status === 'approved',
+                })),
+              ]
+              const shown = bits.slice(0, 3)
+              return (
+                <div
+                  key={iso}
+                  className={`matrixcell ${iso === today ? 'today' : ''}`}
+                  style={{ '--c': m.color }}
+                  onClick={() => onPick(m.id, iso)}
+                >
+                  {shown.map((b) => (
+                    <span key={b.key} className={`bit ${b.cls} ${b.done ? 'done' : ''}`}>{b.label}</span>
+                  ))}
+                  {bits.length > shown.length && <span className="more">+{bits.length - shown.length} more</span>}
+                </div>
+              )
+            })}
+          </Fragment>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** One person's week, seven columns across. */
+function MemberWeek({ state, memberId, week, onPick }) {
+  const today = todayISO()
+  const member = state.members.find((m) => m.id === memberId)
+
+  return (
+    <div className="weekcols">
+      {week.map((iso) => {
+        const d = fromISO(iso)
+        const evts = eventsOn(state, memberId, iso)
+        const chs = choresOn(state, memberId, iso)
+        const st = dayStats(state, memberId, iso)
+        return (
+          <div
+            key={iso}
+            className={`weekcol ${iso === today ? 'today' : ''}`}
+            style={{ '--c': member?.color }}
+            onClick={() => onPick(iso)}
+          >
+            <div className="hd">
+              <div className="w">{DAY_NAMES[d.getDay()]}</div>
+              <div className="d">{d.getDate()}</div>
+              {st.total > 0 && <div className="tiny">{st.done}/{st.total}</div>}
+            </div>
+            <div className="matrixcell" style={{ minHeight: 0, padding: 0 }}>
+              {evts.map((e) => (
+                <span key={e.id} className="bit evt" title={e.title}>{e.emoji} {e.title}</span>
+              ))}
+              {chs.map((c) => (
+                <span
+                  key={c.id}
+                  className={`bit ${choreSubmission(state, c.id, iso)?.status === 'approved' ? 'done' : ''}`}
+                  title={c.title}
+                >
+                  {c.emoji} {c.title}
+                </span>
+              ))}
+              {!evts.length && !chs.length && <span className="more">—</span>}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

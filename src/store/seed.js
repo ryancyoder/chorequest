@@ -118,6 +118,7 @@ export function buildSeed() {
       parentUnlocked: false,
       requirePin: true,
       soundOn: true,
+      layoutMode: 'auto', // 'auto' | 'phone' | 'tablet'
     },
   }
 }

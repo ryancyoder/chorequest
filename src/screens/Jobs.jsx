@@ -45,7 +45,7 @@ export default function Jobs() {
         ))}
       </div>
 
-      <div className="stack" style={{ marginTop: 14 }}>
+      <div className="stack cards" style={{ marginTop: 14 }}>
         {list.length === 0 && (
           <Empty emoji="🗒️" title="No jobs here">
             {filter === 'open' ? 'Everything on the board has been claimed.' : 'Claim one from the board to get started.'}

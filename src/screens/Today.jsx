@@ -43,6 +43,10 @@ export default function Today({ go }) {
     items: chores.filter((c) => timeOfDayBucket(c.time) === b.key),
   })).filter((g) => g.items.length)
 
+  const sections = buildSections({
+    app, state, me, date, stats, chores, grouped, events, myJobs, queue, go, setProof, setConfirmTask,
+  })
+
   return (
     <div className="screen" style={{ '--member': me.color }}>
       {/* ── hero ── */}
@@ -74,95 +78,20 @@ export default function Today({ go }) {
         </div>
       </div>
 
-      {/* ── parent review nudge ── */}
-      {app.isParentMode && queue.length > 0 && (
-        <div className="card tap glow" style={{ marginTop: 12 }} onClick={() => go('review')}>
-          <div className="spread">
-            <div className="row">
-              <div className="task-ico" style={{ fontSize: 26 }}>📋</div>
-              <div>
-                <b>{queue.length} {queue.length === 1 ? 'job is' : 'jobs are'} waiting on you</b>
-                <div className="tiny">AI checked them — you make the call</div>
-              </div>
-            </div>
-            <span style={{ fontSize: 20 }}>›</span>
-          </div>
+      {sections.nudge}
+
+      {/* Phone keeps its original top-to-bottom order; tablet splits the same
+          blocks into two panes so the wide screen isn't one tall column. */}
+      {app.layout === 'tablet' ? (
+        <div className="cols">
+          <div className="col">{sections.chores}</div>
+          <div className="col">{sections.schedule}{sections.jobs}</div>
         </div>
-      )}
-
-      {/* ── today's schedule ── */}
-      {events.length > 0 && (
-        <>
-          <div className="section-title">📅 {relativeDay(date)}'s schedule</div>
-          <div className="stack">
-            {events.map((e) => (
-              <div key={e.id} className={`task evt ${e.category}`} style={{ borderLeftColor: 'var(--c)' }}>
-                <div className="ico">{e.emoji}</div>
-                <div className="grow">
-                  <div className="ttl">{e.title}</div>
-                  <div className="sub">{pretty12(e.start)}{e.end ? ` – ${pretty12(e.end)}` : ''}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      {/* ── routine chores ── */}
-      <div className="section-title">
-        🧹 Routine chores <span className="count">{stats.done}/{stats.total} done</span>
-      </div>
-
-      {chores.length === 0 ? (
-        <Empty emoji="🎈" title="Nothing on the list today">Enjoy the day off.</Empty>
       ) : (
-        grouped.map((g) => (
-          <div key={g.key} style={{ marginBottom: 14 }}>
-            <div className="tiny" style={{ margin: '10px 2px 7px' }}>{g.emoji} {g.label.toUpperCase()}</div>
-            <div className="stack">
-              {g.items.map((c) => (
-                <ChoreRow
-                  key={c.id}
-                  chore={c}
-                  sub={choreSubmission(state, c.id, date)}
-                  color={me.color}
-                  onPhoto={() => setProof({ kind: 'chore', target: c })}
-                  onQuick={() => setConfirmTask(c)}
-                />
-              ))}
-            </div>
-          </div>
-        ))
-      )}
-
-      {/* ── claimed add-on jobs ── */}
-      {myJobs.length > 0 && (
         <>
-          <div className="section-title">🎯 Add-on jobs you claimed <span className="count">{myJobs.length}</span></div>
-          <div className="stack">
-            {myJobs.map((j) => {
-              const sub = jobSubmission(state, j.id)
-              const meta = sub ? STATUS_META[sub.status] : null
-              return (
-                <div key={j.id} className="task" style={{ borderLeftColor: 'var(--gold)' }}>
-                  <div className="ico">🎯</div>
-                  <div className="grow">
-                    <div className="ttl">{j.title}</div>
-                    <div className="sub">
-                      <span className="reward-chip">+{j.points} pts</span>
-                      {j.coins > 0 && <span className="reward-chip">🪙 {j.coins}</span>}
-                      {meta && <span className={`badge-status ${meta.tone}`}>{meta.emoji} {meta.label}</span>}
-                    </div>
-                  </div>
-                  {(!sub || sub.status === 'ai_rejected' || sub.status === 'rejected') && (
-                    <button className="btn primary sm" onClick={() => setProof({ kind: 'job', target: j })}>
-                      {sub ? 'Retry' : 'Finish'}
-                    </button>
-                  )}
-                </div>
-              )
-            })}
-          </div>
+          {sections.schedule}
+          {sections.chores}
+          {sections.jobs}
         </>
       )}
 
@@ -198,6 +127,102 @@ export default function Today({ go }) {
       </Sheet>
     </div>
   )
+}
+
+/** The stackable pieces of the Today screen, so each layout can order them. */
+function buildSections({ app, state, me, date, stats, chores, grouped, events, myJobs, queue, go, setProof, setConfirmTask }) {
+  return {
+    nudge: app.isParentMode && queue.length > 0 && (
+        <div className="card tap glow" style={{ marginTop: 12 }} onClick={() => go('review')}>
+          <div className="spread">
+            <div className="row">
+              <div className="task-ico" style={{ fontSize: 26 }}>📋</div>
+              <div>
+                <b>{queue.length} {queue.length === 1 ? 'job is' : 'jobs are'} waiting on you</b>
+                <div className="tiny">AI checked them — you make the call</div>
+              </div>
+            </div>
+            <span style={{ fontSize: 20 }}>›</span>
+          </div>
+        </div>
+      ),
+
+    chores: (
+      <>
+        <div className="section-title">
+          🧹 Routine chores <span className="count">{stats.done}/{stats.total} done</span>
+        </div>
+        {chores.length === 0 ? (
+          <Empty emoji="🎈" title="Nothing on the list today">Enjoy the day off.</Empty>
+        ) : (
+          grouped.map((g) => (
+            <div key={g.key} style={{ marginBottom: 14 }}>
+              <div className="tiny" style={{ margin: '10px 2px 7px' }}>{g.emoji} {g.label.toUpperCase()}</div>
+              <div className="stack">
+                {g.items.map((c) => (
+                  <ChoreRow
+                    key={c.id}
+                    chore={c}
+                    sub={choreSubmission(state, c.id, date)}
+                    color={me.color}
+                    onPhoto={() => setProof({ kind: 'chore', target: c })}
+                    onQuick={() => setConfirmTask(c)}
+                  />
+                ))}
+              </div>
+            </div>
+          ))
+        )}
+      </>
+    ),
+
+    schedule: events.length > 0 && (
+      <>
+        <div className="section-title">📅 {relativeDay(date)}'s schedule</div>
+        <div className="stack">
+          {events.map((e) => (
+            <div key={e.id} className={`task evt ${e.category}`} style={{ borderLeftColor: 'var(--c)' }}>
+              <div className="ico">{e.emoji}</div>
+              <div className="grow">
+                <div className="ttl">{e.title}</div>
+                <div className="sub">{pretty12(e.start)}{e.end ? ` – ${pretty12(e.end)}` : ''}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </>
+    ),
+
+    jobs: myJobs.length > 0 && (
+      <>
+        <div className="section-title">🎯 Add-on jobs you claimed <span className="count">{myJobs.length}</span></div>
+        <div className="stack">
+          {myJobs.map((j) => {
+            const sub = jobSubmission(state, j.id)
+            const meta = sub ? STATUS_META[sub.status] : null
+            return (
+              <div key={j.id} className="task" style={{ borderLeftColor: 'var(--gold)' }}>
+                <div className="ico">🎯</div>
+                <div className="grow">
+                  <div className="ttl">{j.title}</div>
+                  <div className="sub">
+                    <span className="reward-chip">+{j.points} pts</span>
+                    {j.coins > 0 && <span className="reward-chip">🪙 {j.coins}</span>}
+                    {meta && <span className={`badge-status ${meta.tone}`}>{meta.emoji} {meta.label}</span>}
+                  </div>
+                </div>
+                {(!sub || sub.status === 'ai_rejected' || sub.status === 'rejected') && (
+                  <button className="btn primary sm" onClick={() => setProof({ kind: 'job', target: j })}>
+                    {sub ? 'Retry' : 'Finish'}
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </>
+    ),
+  }
 }
 
 function ChoreRow({ chore, sub, color, onPhoto, onQuick }) {

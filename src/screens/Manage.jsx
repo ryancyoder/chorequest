@@ -473,6 +473,35 @@ function SettingsTab({ app }) {
         </div>
       </div>
 
+      <div className="section-title">Display</div>
+      <div className="card">
+        <b>Layout</b>
+        <p className="muted" style={{ margin: '4px 0 10px' }}>
+          Auto uses the wide layout on an iPad in landscape and the phone layout everywhere else.
+          Pin one if you'd rather it never change. Currently showing: <b>{app.layout}</b>.
+        </p>
+        <div className="chipgroup">
+          {[
+            { key: 'auto', label: '✨ Auto' },
+            { key: 'phone', label: '📱 Always phone' },
+            { key: 'tablet', label: '🖥️ Always iPad' },
+          ].map((o) => (
+            <button
+              key={o.key}
+              className={`chip ${app.layoutPref === o.key ? 'on' : ''}`}
+              onClick={() => app.setLayoutPref(o.key)}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        {app.layoutPref === 'tablet' && app.layout === 'tablet' && window.innerWidth < 900 && (
+          <p className="tiny" style={{ marginTop: 8, color: 'var(--warn)' }}>
+            The iPad layout is cramped on a screen this narrow.
+          </p>
+        )}
+      </div>
+
       <div className="section-title">Snapshot</div>
       <div className="row" style={{ gap: 8 }}>
         <div className="card grow center">

@@ -30,6 +30,9 @@ export default function Review() {
         {queue.length > 0 && <span className="pill" style={{ borderColor: 'var(--bad)' }}>{queue.length} waiting</span>}
       </div>
 
+      <div className="cols">
+      <div className="col">
+
       <div className="section-title">⏳ Needs your OK <span className="count">{queue.length}</span></div>
 
       {queue.length === 0 ? (
@@ -76,6 +79,9 @@ export default function Review() {
         </div>
       )}
 
+      </div>
+      <div className="col">
+
       {recent.length > 0 && (
         <>
           <div className="section-title">🕓 Recently decided</div>
@@ -97,6 +103,9 @@ export default function Review() {
           </div>
         </>
       )}
+
+      </div>
+      </div>
 
       <ReviewSheet sub={open} onClose={() => setOpen(null)} />
     </div>
