@@ -284,6 +284,37 @@ body{
 .shake{ animation:shk .42s ease-in-out }
 @keyframes shk{ 20%{transform:translate(-7px,4px)} 45%{transform:translate(6px,-4px)} 70%{transform:translate(-4px,-2px)} 100%{transform:none} }
 
+/* 8 the order of the star */
+.sigils{
+  position:absolute; left:0; right:0; top:20%;
+  display:flex; justify-content:center; gap:10px;
+}
+.sigil{
+  width:88px; padding:9px 6px; border-radius:12px; text-align:center;
+  background:linear-gradient(160deg, rgba(255,214,10,.18), rgba(0,0,0,.34));
+  border:1px solid rgba(255,214,10,.45);
+}
+.sigil .gl{ display:block; font-size:22px; line-height:1 }
+.sigil .lb{ display:block; font-family:var(--hud); font-size:9px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--parchment); margin-top:5px }
+.sigil .pt{ display:block; font-family:var(--hud); font-size:9.5px; color:var(--gold); margin-top:2px }
+
+.starfly{
+  position:absolute; font-size:26px; z-index:20;
+  filter:drop-shadow(0 0 12px rgba(255,214,10,.9));
+  animation:starfly 2.1s cubic-bezier(.34,.05,.4,1) 1.3s both;
+}
+@keyframes starfly{
+  0%   { left:19%; bottom:37%; opacity:0; transform:scale(.3) rotate(0deg) }
+  12%  { opacity:1 }
+  50%  { bottom:52%; }
+  100% { left:73%; bottom:37%; opacity:1; transform:scale(1.25) rotate(400deg) }
+}
+.starburst{
+  position:absolute; right:15%; bottom:47%; font-size:32px; z-index:21;
+  filter:drop-shadow(0 0 16px rgba(255,214,10,.9));
+}
+
 /* 9 runes */
 .runegrid{ position:absolute; display:grid; grid-template-columns:repeat(5,1fr); gap:5px; width:min(46%,300px) }
 .rune{
@@ -337,7 +368,7 @@ body{
 
 <div class="foot">
   <p>Every number on screen is the real thing: 10 points for a made bed, a 68/100 pass mark on the photo check, 440 HP on The Garage. The app itself lives at <code>ryancyoder.github.io/chorequest</code>.</p>
-  <p>The score is synthesised in the browser — twelve chiptune themes, one per chapter, with the battle music tightening as the golem's health falls. Press <b>Sound on</b> to wake it; browsers won't start audio without a click.</p>
+  <p>The score is synthesised in the browser — a chiptune theme per chapter, with the battle music tightening as the golem's health falls. Press <b>Sound on</b> to wake it; browsers won't start audio without a click.</p>
 </div>
 
 <script>
@@ -447,6 +478,28 @@ body{
     ? { label: `${rm.title}${rm.location ? ' &middot; ' + rm.location : ''} &middot; ${rm.ownerId ? 'named' : 'unclaimed'}` }
     : { label: 'Cereal bowl situation &middot; Living room &middot; unclaimed' };
 
+  /* The most recent confirmed gold star, so the Order chapter quotes something
+     that actually happened in this house. */
+  function realStar(){
+    if(!S || !Array.isArray(S.stars)) return null;
+    const s = S.stars.filter(x => x.status === 'confirmed')
+      .sort((a,b) => b.createdAt - a.createdAt)[0];
+    if(!s) return null;
+    const to = S.members.find(m => m.id === s.toId);
+    const from = S.members.find(m => m.id === s.fromId);
+    if(!to || !from) return null;
+    return { text:s.text, to, from, category:s.category };
+  }
+
+  const rs = realStar();
+  const STAR = rs
+    ? { text: rs.text || 'was caught being good',
+        toName: rs.to.name, toEmoji: rs.to.emoji, toColor: rs.to.color,
+        fromName: rs.from.name, fromEmoji: rs.from.emoji, fromColor: rs.from.color }
+    : { text: 'Helped Rosie with her shoes when she was melting down',
+        toName: kids[3] ? kids[3].n : 'Owen', toEmoji: kids[3] ? kids[3].e : '🐢', toColor: kids[3] ? kids[3].c : '#ffd60a',
+        fromName: kids[0].n, fromEmoji: kids[0].e, fromColor: kids[0].c };
+
   const rnd = (a,b) => a + Math.random()*(b-a);
 
   /* ══════════════ chiptune engine ══════════════════════════════════
@@ -507,6 +560,12 @@ body{
       {w:'sawtooth', g:.22, rel:.25,det:6, n:P("E1 .  E1 .  F1 .  E1 .  Eb1 . E1 .  F1 .  Gb1 .")},
       {w:'square',   g:.12, rel:.3, n:P(".  .  B4 .  .  .  Bb4 . .  .  B4 .  .  .  C5 .")}],
       drums:P("h . h . h . h . h . h . h . h .") },
+
+    // Lydian — the raised fourth gives it wonder rather than pomp, so it reads
+    // as warm recognition instead of another fanfare.
+    stars:  { bpm:92,  voices:[
+      {w:'triangle', g:.28, rel:.9, n:P("F2 .  .  .  C2 .  .  .  D2 .  .  .  G2 .  .  .")},
+      {w:'sine',     g:.20, rel:1.1,n:P("A4 .  C5 .  E5 .  .  B4 .  C5 .  A4 .  F4 .  .")}], drums:null },
 
     bounty: { bpm:118, voices:[
       {w:'triangle', g:.28, rel:.3, n:P("G2 .  .  D2 .  G2 .  .  F2 .  .  C2 .  F2 .  .")},
@@ -873,7 +932,45 @@ body{
     },
 
     /* 8 ─────────────────────────────────────────────── */
-    { id:'bounty', tag:'Chapter VIII', title:'The Bounty Board', dur:11,
+    { id:'stars', tag:'Chapter VIII', title:'The Order of the Star', dur:16,
+      html:()=>`
+        <div class="sky" style="background:linear-gradient(180deg,#0d0a22,#2a1f4e 60%,#3d2f18)">${starfield(56)}</div>
+        <div class="ground" style="background:linear-gradient(180deg,#2e2410,#0a0818)"></div>
+
+        <div style="position:absolute;left:0;right:0;top:7%;text-align:center">
+          <div class="epic in-pop" style="font-size:clamp(17px,3.4vw,31px)">THE ORDER OF THE STAR</div>
+        </div>
+
+        <div class="sigils">
+          ${[['💛','Kindness','+15'],['🛡️','Chivalry','+20'],['🙏','Respect','+20']].map((g,i)=>`
+            <div class="sigil in-pop" style="animation-delay:${.5+i*.3}s">
+              <span class="gl">${g[0]}</span>
+              <span class="lb">${g[1]}</span>
+              <span class="pt">${g[2]}</span>
+            </div>`).join('')}
+        </div>
+
+        <!-- the star is conferred, never claimed -->
+        <div class="hero bob" style="--c:${STAR.fromColor};left:15%;bottom:31%;animation-delay:.2s">
+          <div class="disc">${STAR.fromEmoji}</div>
+          <div class="nm">${STAR.fromName}</div>
+          <div class="cls">noticed it</div>
+        </div>
+        <div class="hero bob" style="--c:${STAR.toColor};right:15%;left:auto;bottom:31%;animation-delay:.5s">
+          <div class="disc">${STAR.toEmoji}</div>
+          <div class="nm">${STAR.toName}</div>
+          <div class="cls">was noticed</div>
+        </div>
+        <span class="starfly">⭐</span>
+        <span class="starburst in-pop" style="animation-delay:3.4s">✨</span>
+
+        ${band('No knight names himself.',
+          `&ldquo;${STAR.text}&rdquo; &mdash; a star for ${STAR.toName}, conferred by ${STAR.fromName}. You can hand one to anybody in the keep except yourself.`,
+          'Family &middot; The wall &middot; three a day, and a parent seals it', 1.4)}`
+    },
+
+    /* 9 ─────────────────────────────────────────────── */
+    { id:'bounty', tag:'Chapter IX', title:'The Bounty Board', dur:11,
       html:()=>`
         <div class="sky" style="background:linear-gradient(180deg,#0d0a22,#20163f)">${starfield(28)}</div>
         <div class="ground"></div>
@@ -987,8 +1084,13 @@ body{
   const starts = []; let acc = 0;
   SCENES.forEach(s => { starts.push(acc); acc += s.dur; });
 
+  // Chapter numbers come from position, so inserting a chapter can't leave the
+  // rest mislabelled.
+  const ROMAN = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII','XIII','XIV','XV'];
+
   // build DOM
   SCENES.forEach((s,i)=>{
+    s.tag = 'Chapter ' + (ROMAN[i] || (i+1));
     const el = document.createElement('div');
     el.className = 'scene';
     el.id = 'scene-' + s.id;
@@ -1039,6 +1141,7 @@ body{
     if(id === 'golem') runRaid();
     if(id === 'quests') sceneTimers.push(setTimeout(()=> SFX.stamp(), 2700));
     if(id === 'mirror') sceneTimers.push(setTimeout(()=> SFX.chime(), 3450));
+    if(id === 'stars')  sceneTimers.push(setTimeout(()=> SFX.chime(), 3400));
     if(id === 'runes')  sceneTimers.push(setTimeout(()=> SFX.levelup(), 3250));
     if(id === 'curse')  sceneTimers.push(setTimeout(()=> SFX.stamp(), 4650));
     if(id === 'seal'){
