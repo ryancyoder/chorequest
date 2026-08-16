@@ -636,16 +636,17 @@ label.field > span { display: block; font-size: 12px; font-weight: 800; text-tra
   background: #0a0818;
   animation: fade .2s;
 }
-.sagabar {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: calc(10px + env(safe-area-inset-top, 0px)) 14px 10px;
-  background: rgba(11, 9, 28, .96);
-  border-bottom: 1px solid var(--line);
-  flex: 0 0 auto;
+.sagaviewer { background: #000; }
+.sagaclose {
+  position: absolute; z-index: 5;
+  top: calc(10px + env(safe-area-inset-top, 0px)); right: 12px;
+  background: rgba(10, 8, 24, .82);
+  border-color: rgba(255, 255, 255, .22);
+  backdrop-filter: blur(8px);
 }
 .sagaframe {
-  flex: 1 1 auto; width: 100%; border: 0; display: block;
-  background: #0a0818;
+  flex: 1 1 auto; width: 100%; height: 100%; border: 0; display: block;
+  background: #000;
 }
 
 /* ═══════════════════════ ⚔️ boss battle ═══════════════════════ */

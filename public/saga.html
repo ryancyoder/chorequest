@@ -197,10 +197,49 @@ body{
    fights the app around it, so this becomes a bare player on the app's own
    night palette. */
 :root.embed{ --page:#0a0818; --page-ink:#efe9f5; --page-dim:#9a92b8; --page-line:#241d45; }
-.embed body{ padding:12px 12px 28px; gap:12px }
+.embed body{ padding:0; gap:0; height:100dvh; overflow:hidden; display:block; background:#000 }
 .embed .masthead, .embed .foot{ display:none }
-.embed .cabinet, .embed .transport, .embed .chapters{ width:100% }
-.embed .screen{ border-radius:10px }
+
+/* The stage is authored for 16:9, so it scales to the largest 16:9 box that
+   fits and letterboxes the rest — filling the screen edge to edge in
+   landscape, properly centred in portrait. */
+.embed .cabinet{
+  position:fixed; inset:0; display:grid; place-items:center; width:auto;
+}
+.embed .screen{
+  width:min(100vw, calc(100dvh * 16 / 9));
+  height:auto; aspect-ratio:16/9;
+  border-radius:0; box-shadow:none;
+}
+
+.embed .transport{
+  position:fixed; left:0; right:0; bottom:0; z-index:10; width:auto;
+  padding:22px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  background:linear-gradient(180deg, transparent, rgba(6,4,18,.86) 45%);
+  transition:opacity .25s;
+}
+.embed .clock{ color:#cfc7ea }
+
+.embed .chapters{
+  position:fixed; left:0; right:0; bottom:0; z-index:12; width:auto;
+  max-height:62dvh; overflow-y:auto;
+  padding:14px 12px calc(14px + env(safe-area-inset-bottom, 0px));
+  background:rgba(10,8,24,.98); border-top:1px solid var(--page-line);
+  transform:translateY(101%); transition:transform .3s cubic-bezier(.2,.9,.3,1);
+}
+.embed.chapters-open .chapters{ transform:none }
+.embed.chapters-open .transport{ opacity:0; pointer-events:none }
+
+.rotatehint{ display:none }
+.embed .rotatehint{
+  position:fixed; left:50%; transform:translateX(-50%); bottom:96px; z-index:11;
+  font-family:var(--hud); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase;
+  background:rgba(10,8,24,.9); border:1px solid var(--page-line); color:var(--page-dim);
+  padding:7px 12px; border-radius:99px; white-space:nowrap;
+  animation:hintFade 6s ease forwards;
+}
+@keyframes hintFade{ 0%,70%{ opacity:1 } 100%{ opacity:0; visibility:hidden } }
+@media (orientation:landscape){ .embed .rotatehint{ display:none } }
 
 /* ═══════════════ scene-specific ═══════════════ */
 
@@ -1293,6 +1332,27 @@ body{
     const box = e.currentTarget.getBoundingClientRect();
     seek(((e.clientX - box.left)/box.width) * TOTAL);
   });
+
+  /* Embedded, the chapter list would bury the picture, so it slides up on
+     demand and the transport gets out of its way. */
+  if(document.documentElement.classList.contains('embed')){
+    const chBtn = document.createElement('button');
+    chBtn.className = 'tbtn';
+    chBtn.type = 'button';
+    chBtn.textContent = '☰ Chapters';
+    chBtn.addEventListener('click', ()=>
+      document.documentElement.classList.toggle('chapters-open'));
+    document.querySelector('.transport').appendChild(chBtn);
+
+    // Tapping a chapter closes the drawer again.
+    document.querySelector('.chapters').addEventListener('click', ()=>
+      document.documentElement.classList.remove('chapters-open'));
+
+    const hint = document.createElement('div');
+    hint.className = 'rotatehint';
+    hint.textContent = '↻ Turn sideways for full screen';
+    document.body.appendChild(hint);
+  }
 
   const castNote = document.getElementById('castNote');
   castNote.textContent = FAM.real

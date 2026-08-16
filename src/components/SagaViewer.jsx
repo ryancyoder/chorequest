@@ -2,6 +2,13 @@ import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 
 /**
+ * saga.html keeps a fixed filename, so a device that has watched it once can be
+ * served a stale copy after a deploy. Bump this whenever the saga changes and
+ * everyone gets the new cut.
+ */
+const SAGA_VERSION = '13'
+
+/**
  * Plays the saga inside the app.
  *
  * It used to open in a new tab, which is fine in a browser and bad once the app
@@ -29,16 +36,11 @@ export default function SagaViewer({ open, onClose }) {
   // size this to the scrolling page instead of the viewport.
   return createPortal(
     <div className="sagaviewer">
-      <div className="sagabar">
-        <span className="row" style={{ gap: 8 }}>
-          <span style={{ fontSize: 18 }}>⚔️</span>
-          <b style={{ fontSize: 14 }}>The Saga of the Seven</b>
-        </span>
-        <button className="btn sm" onClick={onClose} autoFocus>✕ Close</button>
-      </div>
+      {/* Floats over the picture rather than stealing a strip of it. */}
+      <button className="btn sm sagaclose" onClick={onClose} autoFocus>✕ Close</button>
       <iframe
         className="sagaframe"
-        src="./saga.html?embed=1"
+        src={`./saga.html?embed=1&v=${SAGA_VERSION}`}
         title="ChoreQuest: The Saga of the Seven"
         allow="autoplay"
       />
