@@ -11,8 +11,10 @@ export default function ParentGate() {
   const isParent = me.role === 'parent'
   const parentList = parents(app.state)
 
-  function tryUnlock() {
-    if (app.unlockParent(pin)) {
+  // Awaited: when the household is synced the PIN is checked by the database,
+  // because the hash is deliberately unreadable from the client.
+  async function tryUnlock() {
+    if (await app.unlockParent(pin)) {
       setPin(''); setError('')
     } else {
       setError('That PIN did not match.')

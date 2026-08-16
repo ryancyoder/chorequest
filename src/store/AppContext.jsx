@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { buildSeed } from './seed.js'
 import { loadState, saveState, clearState } from './storage.js'
+import { loadHousehold, watchHousehold, verifyPin, saveSetting } from './remote.js'
 import { hydratePhotos, clearPhotos } from '../lib/photos.js'
 import { todayISO, addDays } from '../lib/date.js'
 import { earnedBadges, streakMultiplier, levelFromXp } from '../lib/gamify.js'
@@ -25,9 +26,32 @@ export const useApp = () => useContext(Ctx)
 let seq = 0
 const uid = (p) => `${p}_${Date.now().toString(36)}${(seq++).toString(36)}`
 
-export function AppProvider({ children }) {
-  const [state, setState] = useState(() => loadState() || buildSeed())
+/**
+ * Preferences that describe THIS device rather than the household: which member
+ * is holding it, and whether this screen is a tablet. Syncing these would mean
+ * Dad picking up the iPad changes which kid Ava's phone thinks it is.
+ */
+const DEVICE_KEY = 'chorequest.device.v1'
+export function localDevicePref(key) {
+  try { return JSON.parse(localStorage.getItem(DEVICE_KEY) || '{}')[key] ?? null } catch { return null }
+}
+export function setLocalDevicePref(key, value) {
+  try {
+    const all = JSON.parse(localStorage.getItem(DEVICE_KEY) || '{}')
+    all[key] = value
+    localStorage.setItem(DEVICE_KEY, JSON.stringify(all))
+  } catch { /* private mode — the session still works, it just won't be remembered */ }
+}
+
+export function AppProvider({ children, householdId = null }) {
+  // Two sources of truth, never both at once. With a householdId the server is
+  // authoritative and localStorage is not consulted; without one the app is the
+  // on-device app it has always been.
+  const remote = Boolean(householdId)
+
+  const [state, setState] = useState(() => (remote ? null : loadState() || buildSeed()))
   const [ready, setReady] = useState(false)
+  const [syncError, setSyncError] = useState(null)
   const [toast, setToast] = useState(null)
   const [celebration, setCelebration] = useState(null) // {title, subtitle, emoji}
   const toastTimer = useRef(null)
@@ -35,16 +59,56 @@ export function AppProvider({ children }) {
   // Layout resolves from the saved preference plus the live viewport, so an iPad
   // rotating into landscape switches over on its own.
   const wideViewport = useWideViewport()
-  const layoutPref = state.settings.layoutMode ?? 'auto'
+  // In remote mode the layout preference is still per-device — which screen you
+  // are holding is not a fact about the household — so it stays in localStorage.
+  const layoutPref = state?.settings?.layoutMode ?? localDevicePref('layoutMode') ?? 'auto'
   const layout = resolveLayout(layoutPref, wideViewport)
 
   useEffect(() => {
+    if (remote) return
     hydratePhotos().finally(() => setReady(true))
-  }, [])
+  }, [remote])
 
   useEffect(() => {
+    if (remote || !state) return
     saveState(state)
-  }, [state])
+  }, [state, remote])
+
+  /* ── remote boot ────────────────────────────────────────────────────────
+     A full read rather than an incremental one: a household of seven is a few
+     hundred rows, and rebuilding from scratch removes any chance of the client
+     believing a state that never existed on the server. Realtime just tells us
+     when to do it again. */
+  const reload = useRef(null)
+  reload.current = async () => {
+    try {
+      const next = await loadHousehold(householdId)
+      next.settings.currentMemberId =
+        localDevicePref('currentMemberId') || next.members[0]?.id || null
+      next.settings.layoutMode = localDevicePref('layoutMode') || 'auto'
+      setState(next)
+      setSyncError(null)
+    } catch (err) {
+      setSyncError(err.message)
+    }
+  }
+
+  useEffect(() => {
+    if (!remote) return
+    let alive = true
+    let timer = null
+
+    const run = () => reload.current?.()
+    Promise.all([hydratePhotos(), run()]).finally(() => alive && setReady(true))
+
+    // Coalesce bursts: approving a submission touches several tables at once,
+    // and each one would otherwise trigger its own full reload.
+    const stop = watchHousehold(householdId, () => {
+      clearTimeout(timer)
+      timer = setTimeout(run, 250)
+    })
+    return () => { alive = false; clearTimeout(timer); stop() }
+  }, [remote, householdId])
 
   // Landmines keep escalating while the app is closed, so catch up on mount and
   // whenever the tab comes back into focus, then keep ticking once a minute.
@@ -212,6 +276,7 @@ export function AppProvider({ children }) {
     /** Is the screen actually big enough for the iPad layout? */
     wideViewport,
     setLayoutPref(pref) {
+      setLocalDevicePref('layoutMode', pref)
       update((d) => { d.settings.layoutMode = pref })
     },
 
@@ -220,6 +285,7 @@ export function AppProvider({ children }) {
     },
 
     switchMember(memberId) {
+      setLocalDevicePref('currentMemberId', memberId)
       update((d) => {
         d.settings.currentMemberId = memberId
         const m = d.members.find((x) => x.id === memberId)
@@ -227,9 +293,17 @@ export function AppProvider({ children }) {
       })
     },
 
-    unlockParent(pin) {
+    /**
+     * Async because in remote mode the PIN hash never leaves the database —
+     * the answer comes from verify_person_pin(). Callers must await it.
+     */
+    async unlockParent(pin) {
       const m = state.members.find((x) => x.id === state.settings.currentMemberId)
-      const ok = !state.settings.requirePin || m?.pin === pin
+      if (!state.settings.requirePin) {
+        update((d) => { d.settings.parentUnlocked = true })
+        return true
+      }
+      const ok = remote ? await verifyPin(m?.id, pin) : m?.pin === pin
       if (ok) update((d) => { d.settings.parentUnlocked = true })
       return ok
     },
@@ -1372,5 +1446,18 @@ export function AppProvider({ children }) {
     () => api,
     [state, ready, toast, celebration, layout, layoutPref, wideViewport],
   )
+
+  // Nothing below may render against a null household. `currentMember` is a
+  // getter that App reads before it checks `ready`, so guarding on `ready`
+  // alone is not enough — the guard has to be here.
+  if (!state) {
+    return (
+      <div className="bootscreen">
+        <div className="scanner">🏰</div>
+        <p className="muted">{syncError || 'Reading the household…'}</p>
+      </div>
+    )
+  }
+
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

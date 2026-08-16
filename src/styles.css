@@ -1163,3 +1163,29 @@ label.field > span { display: block; font-size: 12px; font-weight: 800; text-tra
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 }
+
+/* ── sign-in + boot ───────────────────────────────────────────────────────
+   Outside the app shell: these render before there is a member, so they can't
+   use --member and have to carry their own accent. */
+.signin {
+  max-width: 420px;
+  margin: 0 auto;
+  padding: clamp(24px, 8vh, 72px) 20px 40px;
+  display: flex;
+  flex-direction: column;
+}
+.signin-brand { text-align: center; margin-bottom: 22px; }
+.signin-brand h1 { margin: 6px 0 8px; font-size: 30px; letter-spacing: -0.5px; }
+.signin-brand p { margin: 0 auto; max-width: 32ch; }
+.signin .card { display: flex; flex-direction: column; gap: 2px; }
+
+.bootscreen {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+}
