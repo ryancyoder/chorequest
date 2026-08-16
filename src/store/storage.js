@@ -30,6 +30,7 @@ function migrate(state) {
     requirePin: true,
     soundOn: true,
     layoutMode: 'auto',
+    aiSensitivity: 'normal',
     ...(s.settings || {}),
   }
   s.settings.landmineRates = { ...DEFAULT_RATES, ...(s.settings.landmineRates || {}) }
