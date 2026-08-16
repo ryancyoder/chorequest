@@ -624,6 +624,11 @@ label.field > span { display: block; font-size: 12px; font-weight: 800; text-tra
 .starrow { padding: 6px 0; border-bottom: 1px solid var(--line); }
 .starrow:last-child { border-bottom: none; }
 
+.bosscta {
+  border-left: 4px solid var(--ember);
+  background: linear-gradient(100deg, #ff6b3518, var(--card));
+}
+
 .sagalink {
   border-left: 4px solid var(--gold);
   background: linear-gradient(100deg, #ffd60a14, var(--card));

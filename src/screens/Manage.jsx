@@ -27,12 +27,14 @@ export default function Manage() {
       <div className="tabbar">
         <button className={tab === 'chores' ? 'on' : ''} onClick={() => setTab('chores')}>🧹 Chores</button>
         <button className={tab === 'family' ? 'on' : ''} onClick={() => setTab('family')}>👨‍👩‍👧‍👦 Family</button>
+        <button className={tab === 'boss' ? 'on' : ''} onClick={() => setTab('boss')}>⚔️ Boss</button>
         <button className={tab === 'ai' ? 'on' : ''} onClick={() => setTab('ai')}>🤖 AI check</button>
         <button className={tab === 'settings' ? 'on' : ''} onClick={() => setTab('settings')}>⚙️ Settings</button>
       </div>
 
       {tab === 'chores' && <ChoresTab app={app} />}
       {tab === 'family' && <FamilyTab app={app} />}
+      {tab === 'boss' && <BossAdmin app={app} />}
       {tab === 'ai' && <AiTab />}
       {tab === 'settings' && <SettingsTab app={app} />}
     </div>
@@ -647,9 +649,6 @@ function SettingsTab({ app }) {
           </p>
         )}
       </div>
-
-      <div className="section-title">⚔️ Boss battles</div>
-      <BossAdmin app={app} />
 
       <div className="section-title">💣 Family sabotage</div>
       <LandmineSettings app={app} />

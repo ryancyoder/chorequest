@@ -51,7 +51,7 @@ export default function App() {
   const screens = {
     today: <Today go={setTab} />,
     schedule: <Schedule />,
-    jobs: <Jobs />,
+    jobs: <Jobs go={setTab} />,
     mines: <Landmines />,
     rewards: <Rewards />,
     family: <Family go={setTab} />,
@@ -110,6 +110,18 @@ function PhoneBar({ tab, setTab, queue, app, me }) {
       <div className="spread">
         <div className="brand"><span className="dot" /> ChoreQuest</div>
         <div className="row">
+          {/* Only meaningful on a screen big enough for the iPad layout that's
+              been pinned to phone — otherwise it's an escape hatch out of a
+              setting you'd otherwise need the PIN and four taps to undo. */}
+          {app.wideViewport && app.layoutPref === 'phone' && (
+            <button
+              className="btn sm"
+              onClick={() => app.setLayoutPref('auto')}
+              title="Back to the iPad layout"
+            >
+              🖥️ iPad layout
+            </button>
+          )}
           {app.isParentMode && (
             <button className="btn sm" onClick={() => setTab('review')}>
               📋 Review{queue.length > 0 && ` · ${queue.length}`}

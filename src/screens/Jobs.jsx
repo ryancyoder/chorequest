@@ -4,6 +4,8 @@ import { Sheet, Empty, DangerButton } from '../components/ui.jsx'
 import CameraCapture from '../components/CameraCapture.jsx'
 import DictationField from '../components/DictationField.jsx'
 import ProofSheet from '../components/ProofSheet.jsx'
+import { SummonSheet } from '../components/BossPanel.jsx'
+import { liveBoss, bossHp } from '../lib/boss.js'
 import { jobSubmission, STATUS_META, byId } from '../store/selectors.js'
 import { putPhoto, photoUrl } from '../lib/photos.js'
 import { parseSpokenJob } from '../lib/dictation.js'
@@ -15,12 +17,14 @@ const FILTERS = [
   { key: 'all', label: '📋 All' },
 ]
 
-export default function Jobs() {
+export default function Jobs({ go }) {
   const app = useApp()
   const { state } = app
   const me = app.currentMember
   const [filter, setFilter] = useState('open')
   const [adding, setAdding] = useState(false)
+  const [summoning, setSummoning] = useState(false)
+  const boss = liveBoss(state)
   const [detail, setDetail] = useState(null)
   const [proof, setProof] = useState(null)
 
@@ -39,11 +43,43 @@ export default function Jobs() {
         </div>
       </div>
 
+      {/* A big job the whole family tackles at once isn't a bounty — it's a boss.
+          This is the screen people look at when they're thinking about work. */}
+      {app.isParentMode && !boss && (
+        <button className="card tap bosscta" style={{ width: '100%', textAlign: 'left', marginTop: 12 }} onClick={() => setSummoning(true)}>
+          <div className="row">
+            <span style={{ fontSize: 26 }}>⚔️</span>
+            <div className="grow">
+              <b>Summon a boss</b>
+              <div className="tiny">
+                Turn a group project — the garage, the yard — into a monster with a health bar the whole family attacks together.
+              </div>
+            </div>
+            <span style={{ fontSize: 20, opacity: .5 }}>›</span>
+          </div>
+        </button>
+      )}
+
+      {boss && (
+        <div className="card tap bosscta" style={{ marginTop: 12 }} onClick={() => go?.('today')}>
+          <div className="row">
+            <span style={{ fontSize: 26 }}>{boss.emoji}</span>
+            <div className="grow">
+              <b>{boss.name} is standing</b>
+              <div className="tiny">{bossHp(boss)} / {boss.maxHp} HP · attacks are on the Today screen</div>
+            </div>
+            <span style={{ fontSize: 20, opacity: .5 }}>›</span>
+          </div>
+        </div>
+      )}
+
       <div className="tabbar" style={{ marginTop: 12 }}>
         {FILTERS.map((f) => (
           <button key={f.key} className={filter === f.key ? 'on' : ''} onClick={() => setFilter(f.key)}>{f.label}</button>
         ))}
       </div>
+
+      <SummonSheet open={summoning} onClose={() => setSummoning(false)} app={app} me={me} />
 
       <div className="stack cards" style={{ marginTop: 14 }}>
         {list.length === 0 && (

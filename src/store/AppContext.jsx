@@ -209,6 +209,8 @@ export function AppProvider({ children }) {
     layout,
     /** 'auto' | 'phone' | 'tablet' — what the family chose. */
     layoutPref,
+    /** Is the screen actually big enough for the iPad layout? */
+    wideViewport,
     setLayoutPref(pref) {
       update((d) => { d.settings.layoutMode = pref })
     },
@@ -1366,6 +1368,9 @@ export function AppProvider({ children }) {
     },
   }
 
-  const value = useMemo(() => api, [state, ready, toast, celebration, layout, layoutPref])
+  const value = useMemo(
+    () => api,
+    [state, ready, toast, celebration, layout, layoutPref, wideViewport],
+  )
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
