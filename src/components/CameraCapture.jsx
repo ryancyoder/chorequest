@@ -335,7 +335,7 @@ export default function CameraCapture({
                   </button>
                   {align && (
                     <span className="chip" style={{ pointerEvents: 'none' }}>
-                      {align.locked ? 'Lined up' : `${Math.max(0, 100 - Math.round(align.distance * 9))}% there`}
+                      {align.locked ? 'Lined up' : `${align.readiness}% there`}
                     </span>
                   )}
                 </div>

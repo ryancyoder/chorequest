@@ -187,6 +187,34 @@ function pixelChange(A, B, i, j) {
 /* ─────────────────────────── alignment ─────────────────────────── */
 
 /**
+ * Alignment cost, with each pixel's contribution capped.
+ *
+ * This matters more than it looks. The raw difference is dominated by whatever
+ * genuinely changed in the room — which is the entire point of taking the photo.
+ * Averaged straight, a mug on the worktop drags the score down so far that the
+ * viewfinder decides the shot is badly lined up and refuses to lock. Auto-snap
+ * would then only ever fire on a room with nothing to report.
+ *
+ * Capping each pixel bounds how much any one object can object. Clutter is a
+ * few pixels screaming; misalignment is every pixel grumbling. The cap keeps
+ * the second audible over the first.
+ */
+const ALIGN_CAP = 0.45
+
+/**
+ * How close counts as lined up, in pixels at the 96x96 working size.
+ * 3 is about 3% of the frame — comfortably within hand-shake, and well inside
+ * what the change detector forgives. Demanding better than this asks for a
+ * steadiness nobody has while holding a phone.
+ */
+const LOCK_DISTANCE = 3
+const READY_SPAN = 11   // distance at which readiness reads zero
+function alignCost(A, B, i, j) {
+  const c = pixelChange(A, B, i, j)
+  return c > ALIGN_CAP ? ALIGN_CAP : c
+}
+
+/**
  * Find the translation where the two scenes agree best.
  * This is the forgiveness: a photo taken from a foot to the left is shifted,
  * not different, and a shift is something we can simply undo.
@@ -200,7 +228,7 @@ function findOffset(A, B) {
       // Every other pixel — plenty for picking an offset, four times faster.
       for (let y = SEARCH; y < SIZE - SEARCH; y += 2) {
         for (let x = SEARCH; x < SIZE - SEARCH; x += 2) {
-          cost += pixelChange(A, B, y * SIZE + x, (y + dy) * SIZE + (x + dx))
+          cost += alignCost(A, B, y * SIZE + x, (y + dy) * SIZE + (x + dx))
           n++
         }
       }
@@ -368,7 +396,7 @@ function findOffsetNear(A, B, radius, hint) {
       // and only needs to know which way to nudge, not to grade the room.
       for (let y = SEARCH; y < SIZE - SEARCH; y += 3) {
         for (let x = SEARCH; x < SIZE - SEARCH; x += 3) {
-          cost += pixelChange(A, B, y * SIZE + x, (y + dy) * SIZE + (x + dx))
+          cost += alignCost(A, B, y * SIZE + x, (y + dy) * SIZE + (x + dx))
           n++
         }
       }
@@ -414,9 +442,9 @@ export async function createAligner(referenceSrc) {
         : findOffsetNear(ref, frame, 5, hint)
 
       const distance = Math.hypot(off.dx, off.dy)
-      // Cost rises with genuine scene differences too, so this is "does this
-      // look like the same place", not merely "is it lined up".
-      const quality = Math.max(0, Math.min(100, Math.round((1 - off.cost / 0.28) * 100)))
+      // With the cap in place this reads as "is this the same place", and is no
+      // longer dragged down by the very clutter the photo exists to capture.
+      const quality = Math.max(0, Math.min(100, Math.round((1 - off.cost / 0.34) * 100)))
 
       // Poor match, or pinned to the edge of the search window: start over.
       const pinned = Math.abs(Math.abs(off.dx) - Math.abs(hint.dx)) >= 5 ||
@@ -424,14 +452,25 @@ export async function createAligner(referenceSrc) {
       firstPass = quality < 35 || pinned
       hint = { dx: off.dx, dy: off.dy }
 
+      const locked = distance <= LOCK_DISTANCE && quality >= 25
+
       return {
         distance,
         quality,
         offset: { dx: off.dx, dy: off.dy },
-        locked: distance <= 2 && quality >= 45,
+        locked,
+        /*
+         * Readiness reaches 100 exactly when it locks, rather than at a
+         * pixel-perfect zero offset. The first version showed a number that
+         * demanded more than the lock did, so you could sit in the high
+         * nineties indefinitely, chasing a figure nothing was waiting for.
+         */
+        readiness: locked ? 100 : Math.max(0, Math.round(
+          100 * (1 - (distance - LOCK_DISTANCE) / (READY_SPAN - LOCK_DISTANCE)),
+        )),
         nudge: {
-          x: off.dx > 2 ? 'right' : off.dx < -2 ? 'left' : null,
-          y: off.dy > 2 ? 'down' : off.dy < -2 ? 'up' : null,
+          x: off.dx > LOCK_DISTANCE ? 'right' : off.dx < -LOCK_DISTANCE ? 'left' : null,
+          y: off.dy > LOCK_DISTANCE ? 'down' : off.dy < -LOCK_DISTANCE ? 'up' : null,
         },
       }
     },
