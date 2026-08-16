@@ -213,6 +213,7 @@ export function buildSeed() {
       soundOn: true,
       layoutMode: 'auto', // 'auto' | 'phone' | 'tablet'
       landmineRates: { ...DEFAULT_RATES },
+      aiSensitivity: 'normal', // 'strict' | 'normal' | 'relaxed'
     },
   }
 }

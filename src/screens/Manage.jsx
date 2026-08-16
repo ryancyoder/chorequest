@@ -7,7 +7,7 @@ import CameraCapture from '../components/CameraCapture.jsx'
 import ParentGate from '../components/ParentGate.jsx'
 import { putPhoto, photoUrl } from '../lib/photos.js'
 import { MEMBER_COLORS } from '../lib/gamify.js'
-import { checkCompletionPhoto, PASS_THRESHOLD, AI_BACKEND } from '../lib/ai.js'
+import { checkCompletionPhoto } from '../lib/ai.js'
 import { DAY_NAMES, pretty12 } from '../lib/date.js'
 import { ratesOf, DEFAULT_RATES, DEMO_RATES } from '../lib/landmines.js'
 
@@ -35,7 +35,7 @@ export default function Manage() {
       {tab === 'chores' && <ChoresTab app={app} />}
       {tab === 'family' && <FamilyTab app={app} />}
       {tab === 'boss' && <BossAdmin app={app} />}
-      {tab === 'ai' && <AiTab />}
+      {tab === 'ai' && <AiTab app={app} />}
       {tab === 'settings' && <SettingsTab app={app} />}
     </div>
   )
@@ -351,7 +351,7 @@ function MemberEditor({ draft, onClose, onSave, onDelete, count }) {
 
 /* ─────────────────────────── AI playground ─────────────────────────── */
 
-function AiTab() {
+function AiTab({ app }) {
   const [ref, setRef] = useState(null)
   const [shot, setShot] = useState(null)
   const [result, setResult] = useState(null)
@@ -361,7 +361,10 @@ function AiTab() {
     setBusy(true)
     setResult(null)
     try {
-      setResult(await checkCompletionPhoto({ referencePhoto: ref, submittedPhoto: shot, title: 'test', checklist: [] }))
+      setResult(await checkCompletionPhoto({
+        referencePhoto: ref, submittedPhoto: shot, title: 'test', checklist: [],
+        sensitivity: app.state.settings.aiSensitivity || 'normal',
+      }))
     } catch (e) {
       setResult({ pass: false, score: 0, headline: 'Error', detail: e.message, signals: [], regions: [] })
     }
@@ -370,6 +373,30 @@ function AiTab() {
 
   return (
     <>
+      <div className="section-title">How picky should it be?</div>
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="chipgroup">
+          {[
+            { k: 'strict',  l: '🔍 Strict',  d: 'Spots a phone or a sock' },
+            { k: 'normal',  l: '⚖️ Normal',  d: 'Spots a mug or a bowl' },
+            { k: 'relaxed', l: '😌 Relaxed', d: 'Only obvious piles' },
+          ].map((o) => (
+            <button
+              key={o.k}
+              className={`chip ${(app.state.settings.aiSensitivity || 'normal') === o.k ? 'on' : ''}`}
+              onClick={() => app.setSetting('aiSensitivity', o.k)}
+            >{o.l}</button>
+          ))}
+        </div>
+        <p className="muted" style={{ margin: '10px 0 0' }}>
+          {{
+            strict: 'Flags anything left on a surface, down to about a phone. Expect the odd false alarm.',
+            normal: 'Flags a mug-sized object or bigger. A good starting point.',
+            relaxed: 'Only speaks up about real clutter. Fewest false alarms.',
+          }[app.state.settings.aiSensitivity || 'normal']}
+        </p>
+      </div>
+
       <div className="section-title">Try the photo check</div>
       <p className="muted" style={{ margin: '0 2px 14px' }}>
         Shoot a “finished” standard, then a second photo, and see exactly what the kids will see.
@@ -402,9 +429,9 @@ function AiTab() {
           <div className={`verdict ${result.pass ? 'pass' : 'fail'}`}>
             <div className="big">{result.pass ? '✅' : '🔁'}</div>
             <h3>{result.headline}</h3>
-            {result.score != null && (
+            {result.findings?.length > 0 && (
               <div className="scoredial" style={{ color: result.pass ? 'var(--good)' : 'var(--warn)' }}>
-                {result.score}<small>/100</small>
+                {result.findings.length}<small> {result.findings.length === 1 ? 'thing' : 'things'} found</small>
               </div>
             )}
             <p>{result.detail}</p>
@@ -422,35 +449,40 @@ function AiTab() {
             </div>
           )}
 
-          {result.regions?.length > 0 && (
+          {result.findings?.length > 0 && (
             <>
-              <div className="tiny" style={{ margin: '16px 0 8px' }}>REGION BREAKDOWN</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 4 }}>
-                {result.regions.map((r) => (
-                  <div
-                    key={r.name}
-                    style={{
-                      borderRadius: 10, padding: '10px 4px', textAlign: 'center', fontSize: 11, fontWeight: 800,
-                      background: `color-mix(in srgb, ${r.score >= 70 ? 'var(--good)' : r.score >= 45 ? 'var(--warn)' : 'var(--bad)'} 28%, transparent)`,
-                      border: '1px solid var(--line)',
-                    }}
-                  >
-                    {r.score}%
-                    <div style={{ fontSize: 8.5, opacity: .7 }}>{r.name}</div>
+              <div className="tiny" style={{ margin: '16px 0 8px' }}>WHAT IT SPOTTED</div>
+              <div className="stack">
+                {result.findings.slice(0, 6).map((f, i) => (
+                  <div className="row" key={i} style={{ fontSize: 12.5, fontWeight: 700 }}>
+                    <span style={{ fontSize: 15 }}>📍</span>
+                    <span className="grow">Something in the {f.region}</span>
+                    <span className="tiny">{f.areaPct.toFixed(1)}% of frame</span>
                   </div>
                 ))}
               </div>
+              <p className="tiny" style={{ marginTop: 10 }}>
+                It reports where the two photos differ. It has no idea what the objects are —
+                that's what “Ask for extra help” is for.
+              </p>
             </>
           )}
         </div>
       )}
 
       <div className="card" style={{ marginTop: 20 }}>
-        <div className="tiny" style={{ marginBottom: 6 }}>HOW IT'S SET UP</div>
+        <div className="tiny" style={{ marginBottom: 6 }}>WHAT THIS ACTUALLY IS</div>
         <p className="muted" style={{ margin: 0 }}>
-          Engine: <b>{AI_BACKEND === 'local-cv' ? 'on-device computer vision' : 'Claude vision'}</b> ·
-          pass mark <b>{PASS_THRESHOLD}/100</b>. Nothing leaves the device. To swap in a real
-          multimodal model, see the notes at the top of <code>src/lib/ai.js</code>.
+          No model, no account, no API key — this runs on the phone in about 15 milliseconds and
+          nothing leaves the device. It lines the two photos up, then looks for solid patches that
+          don't match: <b>things left out on surfaces</b>. It can't tell a mug from a hairbrush, and
+          it can't judge whether a bed is <i>well</i> made — only whether something is sitting there
+          that isn't in your finished photo.
+        </p>
+        <p className="muted" style={{ margin: '8px 0 0' }}>
+          For the harder calls there's <b>Ask for extra help</b> on the result screen, which hands
+          the photos and your checklist to a real vision model. That one needs a small server
+          holding an API key — see <code>docs/photo-check-server.md</code>.
         </p>
       </div>
     </>

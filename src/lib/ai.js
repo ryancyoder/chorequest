@@ -1,327 +1,248 @@
 /**
- * AI "did they actually finish it?" photo check.
+ * The photo check.
  *
- * ── How this works today (local, offline, no API key) ────────────────────────
- * We compare the kid's proof photo against the parent-set "this is what "done"
- * looks like" reference photo using classic computer-vision heuristics that run
- * entirely in the browser on a <canvas>:
+ * Two tiers, by design:
  *
- *   1. Structural similarity  — both images are downscaled to a 16x16 luminance
- *      grid, contrast-normalized, and compared cell by cell. Catches "the bed is
- *      made / the counter is clear" style layout matches.
- *   2. Gradient (dHash) match — direction of brightness change between adjacent
- *      cells. Robust to lighting, exposure and white balance differences, which
- *      matters a lot when a kid shoots at night and the reference was shot at noon.
- *   3. Color histogram    — 4x4x4 RGB bins, histogram intersection. Catches
- *      "there is still a giant red laundry pile in frame."
- *   4. Region breakdown   — the frame is split 3x3 so we can tell the kid *where*
- *      it doesn't match ("bottom-left still doesn't match the reference").
+ *  1. LOCAL (free, instant, offline) — scene-change detection from lib/vision.js.
+ *     It aligns the two photos, then looks for contiguous lumps of new detail:
+ *     things left out on surfaces. It cannot tell you a bed is badly made, but
+ *     it is good at "there are two objects on the counter that weren't there".
  *
- * It is deliberately forgiving on lighting/angle and strict on large blobs of
- * stuff that shouldn't be there. It also refuses to pass a photo that is
- * essentially identical to the reference (a kid photographing the reference
- * photo off another screen) — see the `spoof` check.
+ *  2. REMOTE (a real vision model, on request) — for when the local pass is
+ *     unsure, or someone disagrees with it. This is the "Ask for extra help"
+ *     path. It reads the parent's checklist and answers it item by item.
  *
- * ── Swapping in real Claude vision ───────────────────────────────────────────
- * Everything in the app calls exactly one function: `checkCompletionPhoto()`.
- * To go from heuristics to a real multimodal model, implement `remoteCheck()`
- * below and flip AI_BACKEND to 'claude'. The return shape must stay the same.
- * Do NOT ship an Anthropic API key in the browser bundle — proxy it through a
- * tiny server route (see README) so the key stays server-side.
+ * The remote tier needs a server route holding an API key. There is no key in
+ * this bundle and there never should be — anything shipped to the browser is
+ * readable by anyone who loads the page. See remoteCheck() below.
  */
 
-export const AI_BACKEND = 'local-cv' // 'local-cv' | 'claude'
+import { analysePair, describeRegions, countPhrase } from './vision.js'
 
-export const PASS_THRESHOLD = 68
-
-const GRID = 16
-const REGION = 3
-
-/* ─────────────────────────── image plumbing ─────────────────────────── */
-
-function loadImage(src) {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => resolve(img)
-    img.onerror = () => reject(new Error('Could not read that image'))
-    img.src = src
-  })
-}
-
-/** Downscale to GRID x GRID and pull luminance + rgb out. */
-async function fingerprint(src) {
-  const img = await loadImage(src)
-  const c = document.createElement('canvas')
-  c.width = GRID
-  c.height = GRID
-  const ctx = c.getContext('2d', { willReadFrequently: true })
-  ctx.drawImage(img, 0, 0, GRID, GRID)
-  const { data } = ctx.getImageData(0, 0, GRID, GRID)
-
-  const gray = new Float32Array(GRID * GRID)
-  const rgb = []
-  for (let i = 0; i < GRID * GRID; i++) {
-    const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2]
-    gray[i] = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-    rgb.push([r, g, b])
-  }
-  return { gray, rgb, w: img.naturalWidth, h: img.naturalHeight }
-}
-
-/** Contrast-normalize so a dark bedroom photo can still match a bright one. */
-function normalize(gray) {
-  let min = 1, max = 0
-  for (const v of gray) { if (v < min) min = v; if (v > max) max = v }
-  const span = Math.max(0.08, max - min)
-  const out = new Float32Array(gray.length)
-  for (let i = 0; i < gray.length; i++) out[i] = (gray[i] - min) / span
-  return out
-}
-
-/* ─────────────────────────── the three signals ─────────────────────────── */
-
-function structuralScore(a, b) {
-  const na = normalize(a), nb = normalize(b)
-  let sum = 0
-  for (let i = 0; i < na.length; i++) sum += Math.abs(na[i] - nb[i])
-  return 1 - sum / na.length
-}
-
-function gradientScore(a, b) {
-  const na = normalize(a), nb = normalize(b)
-  let same = 0, total = 0
-  for (let y = 0; y < GRID; y++) {
-    for (let x = 0; x < GRID - 1; x++) {
-      const i = y * GRID + x
-      if ((na[i] < na[i + 1]) === (nb[i] < nb[i + 1])) same++
-      total++
-    }
-  }
-  return same / total
-}
-
-function colorScore(rgbA, rgbB) {
-  const bins = 4
-  const histA = new Float32Array(bins ** 3)
-  const histB = new Float32Array(bins ** 3)
-  const idx = ([r, g, b]) =>
-    Math.min(bins - 1, (r / 256) * bins | 0) * bins * bins +
-    Math.min(bins - 1, (g / 256) * bins | 0) * bins +
-    Math.min(bins - 1, (b / 256) * bins | 0)
-  for (const px of rgbA) histA[idx(px)]++
-  for (const px of rgbB) histB[idx(px)]++
-  let inter = 0
-  const n = rgbA.length
-  for (let i = 0; i < histA.length; i++) inter += Math.min(histA[i], histB[i])
-  return inter / n
-}
-
-const REGION_NAMES = [
-  'top-left', 'top-center', 'top-right',
-  'middle-left', 'center', 'middle-right',
-  'bottom-left', 'bottom-center', 'bottom-right',
-]
-
-function regionScores(a, b) {
-  const na = normalize(a), nb = normalize(b)
-  const step = GRID / REGION
-  const out = []
-  for (let ry = 0; ry < REGION; ry++) {
-    for (let rx = 0; rx < REGION; rx++) {
-      let sum = 0, count = 0
-      for (let y = Math.floor(ry * step); y < Math.floor((ry + 1) * step); y++) {
-        for (let x = Math.floor(rx * step); x < Math.floor((rx + 1) * step); x++) {
-          sum += Math.abs(na[y * GRID + x] - nb[y * GRID + x])
-          count++
-        }
-      }
-      out.push({
-        name: REGION_NAMES[ry * REGION + rx],
-        score: Math.round((1 - sum / count) * 100),
-      })
-    }
-  }
-  return out
-}
-
-/* ─────────────────────────── public API ─────────────────────────── */
+/** Set by the app when a server route is configured. */
+export const REMOTE_ENDPOINT = '/api/check-photo'
 
 /**
- * @param {object} opts
- * @param {string} opts.referencePhoto  data URL of the parent's "finished" standard
- * @param {string} opts.submittedPhoto  data URL of the kid's proof photo
- * @param {string} [opts.title]         task name, for message copy
- * @param {string[]} [opts.checklist]   parent's must-haves, surfaced to the reviewer
- * @returns {Promise<AiVerdict>}
- *
- * @typedef {object} AiVerdict
- * @property {boolean} pass
- * @property {number} score            0-100 confidence this matches the standard
- * @property {string} headline         one-liner for the kid
- * @property {string} detail           what to fix, or what looked good
- * @property {{name:string,score:number}[]} regions
- * @property {{label:string,value:number}[]} signals
- * @property {string[]} checklist      passed through for the parent's review card
- * @property {string} backend
+ * Verdict bands, as % of the frame taken up by things that don't match.
+ * For reference: a mug on a worktop is roughly 2%, a phone about 0.6%, and
+ * camera drift of a few percent leaves under 1% behind.
  */
-export async function checkCompletionPhoto(opts) {
-  if (AI_BACKEND === 'claude') return remoteCheck(opts)
-  return localCheck(opts)
+const BANDS = {
+  strict:  { clean: 0.4, messy: 0.9 },   // catches a phone or a sock
+  normal:  { clean: 1.0, messy: 2.2 },   // catches a mug or a bowl
+  relaxed: { clean: 2.0, messy: 4.5 },   // only obvious piles
 }
 
-async function localCheck({ referencePhoto, submittedPhoto, title = 'this job', checklist = [] }) {
-  // No reference photo on file — we can't grade it, so route straight to a human.
+/**
+ * @typedef {object} Verdict
+ * @property {boolean} pass
+ * @property {'clean'|'cluttered'|'unsure'|'wrong-place'|'identical'} outcome
+ * @property {number|null} score      confidence this is tidy, 0-100
+ * @property {string} headline
+ * @property {string} detail
+ * @property {{label:string,value:number}[]} signals
+ * @property {Array} findings         the objects it thinks were left out
+ * @property {string[]} checklist
+ * @property {boolean} canEscalate    worth spending a real model on?
+ */
+
+/**
+ * Did they actually tidy up? Compares their photo against the parent's
+ * "this is what finished looks like" reference.
+ */
+export async function checkCompletionPhoto({
+  referencePhoto, submittedPhoto, title = 'this job', checklist = [], sensitivity = 'normal',
+}) {
   if (!referencePhoto) {
     return {
-      pass: true,
-      score: null,
+      pass: true, outcome: 'unsure', score: null, skipped: true,
       headline: 'No reference photo on file',
-      detail: `There's no "finished" standard saved for ${title}, so this one goes straight to a parent to look at.`,
-      regions: [],
-      signals: [],
-      checklist,
-      backend: AI_BACKEND,
-      skipped: true,
+      detail: `There's no "finished" photo saved for ${title}, so this goes straight to a parent to look at.`,
+      signals: [], findings: [], checklist, canEscalate: true,
     }
   }
 
-  const [ref, sub] = await Promise.all([fingerprint(referencePhoto), fingerprint(submittedPhoto)])
-
-  const structural = structuralScore(ref.gray, sub.gray)
-  const gradient = gradientScore(ref.gray, sub.gray)
-  const color = colorScore(ref.rgb, sub.rgb)
-  const regions = regionScores(ref.gray, sub.gray)
-
-  // Weighted blend, then a gentle curve so mid-range scores spread out and read
-  // as a believable percentage rather than clustering at 80-something.
-  const raw = 0.45 * structural + 0.35 * gradient + 0.20 * color
-  const score = Math.max(0, Math.min(100, Math.round((raw - 0.35) / 0.6 * 100)))
-
-  // Anti-spoof: a pixel-perfect match means they photographed the reference
-  // itself (or re-uploaded it), not the actual room.
-  const spoof = structural > 0.985 && gradient > 0.99 && color > 0.985
-
-  const worst = [...regions].sort((a, b) => a.score - b.score)[0]
-  const weak = regions.filter((r) => r.score < 55).map((r) => r.name)
+  const a = await analysePair(referencePhoto, submittedPhoto, { sensitivity })
+  const band = BANDS[sensitivity] ?? BANDS.normal
+  const drift = Math.hypot(a.offset.dx, a.offset.dy)
 
   const signals = [
-    { label: 'Layout match', value: Math.round(structural * 100) },
-    { label: 'Shape & edges', value: Math.round(gradient * 100) },
-    { label: 'Color match', value: Math.round(color * 100) },
+    { label: 'Same place', value: a.matchQuality },
+    { label: 'Surfaces clear', value: Math.max(0, Math.round(100 - a.changes.areaPct * 14)) },
+    { label: 'Lined up', value: Math.max(0, 100 - Math.round(drift * 8)) },
   ]
 
-  if (spoof) {
+  // Cheating is submitting the reference file itself, and that's an exact byte
+  // match — nothing else. A photo that merely *looks* identical to "finished"
+  // is someone who did the job and framed it beautifully, which is the best
+  // possible outcome, not a crime. The earlier version accused them of it.
+  if (referencePhoto === submittedPhoto) {
     return {
-      pass: false,
-      score,
+      pass: false, outcome: 'identical', score: 0,
       headline: 'That looks like the example photo',
-      detail: 'This is a pixel-for-pixel match with the reference image. Take a fresh photo of the real thing.',
-      regions, signals, checklist, backend: AI_BACKEND, spoof: true,
+      detail: 'This is essentially the same image as the reference. Take a fresh photo of the real thing.',
+      signals, findings: [], checklist, canEscalate: false,
     }
   }
 
-  const pass = score >= PASS_THRESHOLD
+  // Nothing lines up: a different room, or the lights changed so much that the
+  // comparison is meaningless. Either way, say so instead of guessing.
+  if (!a.sameScene) {
+    const lighting = a.lightingShift > 0.12
+    return {
+      pass: true, outcome: 'wrong-place', score: null,
+      headline: lighting ? "Can't tell — the lighting is completely different" : "Can't tell — this looks like a different spot",
+      detail: lighting
+        ? 'The two photos are lit so differently that nothing useful can be compared. Try again in similar light, or send it to a parent as is.'
+        : "This doesn't line up with the reference photo at all. Try again from roughly where the example was taken.",
+      signals, findings: [], checklist, canEscalate: true,
+    }
+  }
 
-  const headline = pass
-    ? score >= 90 ? 'Spotless. Nailed it.' : score >= 78 ? 'Looks done!' : 'Close enough — passing it on'
-    : score >= 50 ? 'Almost there' : 'Not done yet'
+  // Standing well away from where the reference was shot. Beyond about this
+  // much drift the leftover misalignment starts looking like clutter, so ask
+  // for a better shot rather than accusing anyone of leaving things out.
+  if (drift >= 8) {
+    return {
+      pass: true, outcome: 'unsure', score: null,
+      headline: 'Line it up a bit closer',
+      detail: 'This was taken from a fair way off the reference angle, which makes it hard to tell what has actually moved. Use the 👻 ghost overlay to match the shot, or send it on and let a parent decide.',
+      signals, findings: [], checklist, canEscalate: true,
+    }
+  }
 
-  const detail = pass
-    ? weak.length
-      ? `Matches the standard. The ${weak.join(' and ')} is a little different, but a parent will make the call.`
-      : 'This matches the finished photo across the whole frame. Sent to a parent for the final OK.'
-    : weak.length
-      ? `The ${weak.slice(0, 2).join(' and ')} ${weak.length > 1 ? 'areas don\'t' : 'area doesn\'t'} match the finished photo yet. Take another look, then re-shoot from the same spot.`
-      : `Overall this doesn't match the finished photo closely enough — the ${worst.name} is the biggest difference. Try shooting from the same angle as the example.`
+  const found = a.changes.blobs
+  const area = a.changes.areaPct
+  const score = Math.max(0, Math.min(100, Math.round(100 - (area / band.messy) * 55)))
 
-  return { pass, score, headline, detail, regions, signals, checklist, backend: AI_BACKEND }
+  if (area <= band.clean) {
+    return {
+      pass: true, outcome: 'clean', score,
+      headline: 'Nothing left out',
+      detail: 'Surfaces match the finished photo — nothing sitting out that shouldn\'t be. Sent to a parent for the final OK.',
+      // Below the clean bar, whatever turned up is noise, so don't parade it.
+      signals, findings: [], checklist, canEscalate: true,
+    }
+  }
+
+  if (area >= band.messy) {
+    return {
+      pass: false, outcome: 'cluttered', score,
+      headline: `${countPhrase(found.length)} still out`,
+      detail: `There's something on ${describeRegions(found)} that isn't in the finished photo. Put it away and shoot it again from the same spot.`,
+      signals, findings: found, checklist, canEscalate: true,
+    }
+  }
+
+  // In between: something's there, but not obviously a mess.
+  return {
+    pass: true, outcome: 'unsure', score,
+    headline: 'Mostly clear — one for a parent',
+    detail: found.length
+      ? `Nearly there. There's a little something around ${describeRegions(found, 1)}, so a parent should be the judge.`
+      : 'Close to the finished photo. A parent should take the final look.',
+    signals, findings: found, checklist, canEscalate: true,
+  }
 }
 
 /**
- * Landmine defusal — the same machinery, run backwards.
- *
- * For a chore we ask "does this look like the finished standard?". For a mess
- * there is no standard, only a photo of the disaster. So we ask the opposite:
- * "is this meaningfully different from the mess?"
- *
- *   • Nearly identical  → nothing was cleaned. Rejected, with attitude.
- *   • Somewhat changed  → plausible cleanup, goes to a parent.
- *   • Nothing in common → suspicious; probably a photo of a different room.
- *     Still forwarded, but flagged so the reviewing parent knows to look twice.
- *
- * A human always makes the final call, which is what keeps this honest — the
- * heuristic only has to be good enough to stop the lazy "same pile, new angle"
- * attempt, and it is.
+ * Landmine defusal runs the same machinery backwards: here the good outcome is
+ * that stuff has been REMOVED since the mess photo was taken.
  */
-export async function checkDefusePhoto({ messPhoto, defusePhoto, title = 'this mess' }) {
+export async function checkDefusePhoto({ messPhoto, defusePhoto, title = 'this mess', sensitivity = 'normal' }) {
   if (!messPhoto) {
     return {
-      pass: true, score: null, skipped: true,
+      pass: true, outcome: 'unsure', score: null, skipped: true,
       headline: 'No before photo on file',
       detail: `There's no photo of ${title} to compare against, so a parent will judge this one directly.`,
-      regions: [], signals: [], checklist: [], backend: AI_BACKEND,
+      signals: [], findings: [], checklist: [], canEscalate: true,
     }
   }
 
-  const [before, after] = await Promise.all([fingerprint(messPhoto), fingerprint(defusePhoto)])
-
-  const structural = structuralScore(before.gray, after.gray)
-  const gradient = gradientScore(before.gray, after.gray)
-  const color = colorScore(before.rgb, after.rgb)
-  const regions = regionScores(before.gray, after.gray)
-
-  const sameness = Math.round(
-    Math.max(0, Math.min(100, ((0.45 * structural + 0.35 * gradient + 0.20 * color) - 0.35) / 0.6 * 100)),
-  )
-  // Score here means "how much changed", the inverse of the chore check.
-  const score = 100 - sameness
+  const a = await analysePair(messPhoto, defusePhoto, { sensitivity })
+  const band = BANDS[sensitivity] ?? BANDS.normal
 
   const signals = [
-    { label: 'Scene changed', value: score },
-    { label: 'Clutter shifted', value: Math.round((1 - color) * 100) },
-    { label: 'Edges redrawn', value: Math.round((1 - gradient) * 100) },
+    { label: 'Same place', value: a.matchQuality },
+    { label: 'Scene changed', value: Math.min(100, Math.round(a.changes.areaPct * 16)) },
+    { label: 'Lined up', value: Math.max(0, 100 - Math.round(Math.hypot(a.offset.dx, a.offset.dy) * 8)) },
   ]
 
-  const changed = regions.filter((r) => r.score < 60).map((r) => r.name)
-
-  if (sameness >= 88) {
+  if (a.changes.areaPct < 0.3 && a.matchQuality > 96) {
     return {
-      pass: false, score,
+      pass: false, outcome: 'identical', score: 0,
       headline: 'That is the same mess',
-      detail: 'This is essentially the identical photo — same pile, possibly a new angle. Bold move. Clean it for real and try again.',
-      regions, signals, checklist: [], backend: AI_BACKEND, sameShot: true,
+      detail: 'Nothing has changed since the photo that armed this. Bold. Clean it for real and try again.',
+      signals, findings: [], checklist: [], canEscalate: false,
     }
   }
 
-  if (sameness <= 12) {
+  if (!a.sameScene) {
     return {
-      pass: true, score,
-      headline: 'Whoa — completely different scene',
-      detail: 'Almost nothing here matches the original photo. That might mean a heroic cleanup, or it might mean this is a photo of somewhere else entirely. Flagged for a parent to check.',
-      regions, signals, checklist: [], backend: AI_BACKEND, suspicious: true,
+      pass: true, outcome: 'wrong-place', score: null,
+      headline: 'Different spot entirely',
+      detail: "This doesn't line up with the crime scene, so it can't be compared. Flagged for a parent to look at.",
+      signals, findings: [], checklist: [], canEscalate: true,
+    }
+  }
+
+  // For a defusal, change IS the good news — the pile that was there is gone.
+  if (a.changes.areaPct >= band.messy) {
+    return {
+      pass: true, outcome: 'clean', score: Math.min(100, Math.round(a.changes.areaPct * 14)),
+      headline: 'That got cleared up',
+      detail: `Plenty has changed around ${describeRegions(a.changes.blobs)}. Sent to a parent to confirm and release the pot.`,
+      signals, findings: a.changes.blobs, checklist: [], canEscalate: false,
     }
   }
 
   return {
-    pass: true, score,
-    headline: score >= 60 ? 'That looks cleaned up' : 'Something definitely changed',
-    detail: changed.length
-      ? `The ${changed.slice(0, 2).join(' and ')} changed the most. Sent to a parent to confirm and release the pot.`
-      : 'The scene has clearly changed since the mine was armed. Sent to a parent to confirm and release the pot.',
-    regions, signals, checklist: [], backend: AI_BACKEND,
+    pass: false, outcome: 'cluttered', score: Math.round(a.changes.areaPct * 14),
+    headline: 'Not much has moved',
+    detail: 'Barely anything has changed since the mine was armed. Clear it properly, then shoot the same spot again.',
+    signals, findings: a.changes.blobs, checklist: [], canEscalate: true,
   }
 }
 
+/* ─────────────────────── tier two: the real model ─────────────────────── */
+
 /**
- * Real multimodal check. Wire this to a server route that holds the API key.
- * Kept here so the swap is a one-line change to AI_BACKEND above.
+ * "Ask for extra help" — hand both photos and the checklist to a vision model.
+ *
+ * Requires a server route that holds the API key. Never put a key in this
+ * bundle: everything here is downloadable by anyone who opens the app. The
+ * route should accept { referencePhoto, submittedPhoto, title, checklist } as
+ * data URLs and return the same Verdict shape used above.
+ *
+ * A reference implementation lives in docs/photo-check-server.md.
  */
-async function remoteCheck({ referencePhoto, submittedPhoto, title, checklist }) {
-  const res = await fetch('/api/check-photo', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ referencePhoto, submittedPhoto, title, checklist }),
-  })
-  if (!res.ok) throw new Error(`Photo check failed (${res.status})`)
-  return res.json()
+export async function askForHelp({ referencePhoto, submittedPhoto, title, checklist = [] }) {
+  let res
+  try {
+    res = await fetch(REMOTE_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ referencePhoto, submittedPhoto, title, checklist }),
+    })
+  } catch {
+    return {
+      unavailable: true,
+      headline: 'Extra help isn’t set up yet',
+      detail: 'This asks a real vision model to read the photo against your checklist. It needs a small server holding an API key — see docs/photo-check-server.md.',
+    }
+  }
+
+  if (res.status === 404) {
+    return {
+      unavailable: true,
+      headline: 'Extra help isn’t set up yet',
+      detail: 'No checking service is connected to this app yet. Until one is, a parent makes the call.',
+    }
+  }
+  if (!res.ok) {
+    return { unavailable: true, headline: 'Extra help failed', detail: `The checking service returned ${res.status}.` }
+  }
+
+  const data = await res.json()
+  return { ...data, remote: true }
 }

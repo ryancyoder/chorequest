@@ -30,7 +30,10 @@ export default function DefuseSheet({ open, onClose, mine, member }) {
     setStep('checking')
     let result
     try {
-      result = await checkDefusePhoto({ messPhoto: before, defusePhoto: photo, title: mine.title })
+      result = await checkDefusePhoto({
+        messPhoto: before, defusePhoto: photo, title: mine.title,
+        sensitivity: app.state.settings.aiSensitivity || 'normal',
+      })
     } catch (err) {
       result = {
         pass: true, score: null, errored: true,

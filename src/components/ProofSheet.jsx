@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Sheet, Confetti } from './ui.jsx'
 import CameraCapture from './CameraCapture.jsx'
 import { useApp } from '../store/AppContext.jsx'
-import { checkCompletionPhoto } from '../lib/ai.js'
+import { checkCompletionPhoto, askForHelp } from '../lib/ai.js'
 import { putPhoto, photoUrl } from '../lib/photos.js'
 
 /**
@@ -16,6 +16,18 @@ export default function ProofSheet({ open, onClose, kind, target, member, dateIS
   const [step, setStep] = useState('shoot') // shoot | checking | result
   const [verdict, setVerdict] = useState(null)
   const [note, setNote] = useState('')
+  const [help, setHelp] = useState(null)
+  const [helping, setHelping] = useState(false)
+
+  /** Tier two: hand it to a real vision model, if one is connected. */
+  async function askHelp() {
+    setHelping(true)
+    setHelp(await askForHelp({
+      referencePhoto: reference, submittedPhoto: photo,
+      title: target.title, checklist: target.checklist || [],
+    }))
+    setHelping(false)
+  }
 
   const reference = target ? photoUrl(target.referencePhotoId) : null
 
@@ -40,6 +52,7 @@ export default function ProofSheet({ open, onClose, kind, target, member, dateIS
         submittedPhoto: photo,
         title: target.title,
         checklist: target.checklist || [],
+        sensitivity: app.state.settings.aiSensitivity || 'normal',
       })
     } catch (err) {
       result = {
@@ -133,13 +146,30 @@ export default function ProofSheet({ open, onClose, kind, target, member, dateIS
           <div className={`verdict ${verdict.pass ? 'pass' : 'fail'}`}>
             <div className="big">{verdict.pass ? '✅' : '🔁'}</div>
             <h3>{verdict.headline}</h3>
-            {verdict.score != null && (
+            {verdict.findings?.length > 0 && (
               <div className="scoredial" style={{ color: verdict.pass ? 'var(--good)' : 'var(--warn)' }}>
-                {verdict.score}<small>/100</small>
+                {verdict.findings.length}<small> {verdict.findings.length === 1 ? 'thing' : 'things'} found</small>
               </div>
             )}
             <p>{verdict.detail}</p>
           </div>
+
+          {verdict.canEscalate && (
+            <button
+              className="btn wide"
+              style={{ marginTop: 12 }}
+              onClick={askHelp}
+              disabled={helping}
+            >
+              {helping ? '🛰️ Asking…' : '🛰️ Ask for extra help'}
+            </button>
+          )}
+          {help && (
+            <div className={`card ${help.unavailable ? '' : 'glow'}`} style={{ marginTop: 10 }}>
+              <b style={{ fontSize: 14 }}>{help.headline}</b>
+              <p className="muted" style={{ margin: '4px 0 0' }}>{help.detail}</p>
+            </div>
+          )}
 
           {verdict.signals?.length > 0 && (
             <div className="signals">
