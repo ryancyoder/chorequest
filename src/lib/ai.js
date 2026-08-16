@@ -1,20 +1,22 @@
 /**
  * The photo check.
  *
- * Two tiers, by design:
+ * Two engines. The UI only ever calls this file; this file picks.
  *
- *  1. LOCAL (free, instant, offline) — scene-change detection from lib/vision.js.
- *     It aligns the two photos, then looks for contiguous lumps of new detail:
- *     things left out on surfaces. It cannot tell you a bed is badly made, but
- *     it is good at "there are two objects on the counter that weren't there".
+ *  1. CLAUDE (primary, whenever settings.photoCheckUrl is set) — posts both
+ *     photos to the Worker in server/, which holds the API key. It reads the
+ *     parent's checklist and answers it item by item, which is the entire
+ *     reason it exists: the local engine never could.
  *
- *  2. REMOTE (a real vision model, on request) — for when the local pass is
- *     unsure, or someone disagrees with it. This is the "Ask for extra help"
- *     path. It reads the parent's checklist and answers it item by item.
+ *  2. LOCAL (fallback — free, instant, offline) — scene-change detection from
+ *     lib/vision.js. It aligns the two photos and looks for contiguous lumps of
+ *     new detail: things left out on surfaces. Good at "two objects on the
+ *     counter that weren't there", poor at real rooms with real lighting, and
+ *     silent on the checklist. It runs when no service is configured, and
+ *     whenever the service can't answer.
  *
- * The remote tier needs a server route holding an API key. There is no key in
- * this bundle and there never should be — anything shipped to the browser is
- * readable by anyone who loads the page. See remoteCheck() below.
+ * There is no key in this bundle and there never should be — anything shipped
+ * to the browser is readable by anyone who loads the page.
  */
 
 import { analysePair, describeRegions, countPhrase } from './vision.js'
