@@ -355,6 +355,39 @@ label.field > span { display: block; font-size: 12px; font-weight: 800; text-tra
 .shutter i { width: 52px; height: 52px; border-radius: 99px; background: linear-gradient(135deg, #ff4fd8, #a06cff); display: block; }
 .shutter:active { transform: scale(.92); }
 
+/* ── full-screen viewfinder (ghost mode only; otherwise iOS takes over) ── */
+.camfull {
+  position: fixed; inset: 0; z-index: 220; background: #000;
+  overflow: hidden;
+}
+.camfull video {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; display: block;
+}
+.camfull .ghost {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; pointer-events: none;
+}
+.camfull .ghost.diff { mix-blend-mode: difference; }
+.camfull .camgrid { position: absolute; inset: 0; pointer-events: none; }
+
+.camtop {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 5;
+  display: flex; align-items: center; gap: 12px;
+  padding: calc(12px + env(safe-area-inset-top, 0px)) 14px 14px;
+  background: linear-gradient(180deg, rgba(0,0,0,.72), transparent);
+}
+.camhint {
+  font-size: 12px; font-weight: 700; color: #fff;
+  text-shadow: 0 1px 6px #000; flex: 1; text-align: right;
+}
+.cambottom {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 5;
+  padding: 18px 14px calc(18px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, transparent, rgba(0,0,0,.78) 40%);
+}
+.cambottom .shutter { margin-top: 14px; }
+
 /* ── ghost overlay: line the shot up with the original ── */
 .camwrap .ghost {
   position: absolute; inset: 0; width: 100%; height: 100%;

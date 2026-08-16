@@ -1,18 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { downscale, fileToDataUrl, grabFrame, hasLiveCamera } from '../lib/camera.js'
 
 /**
- * Photo capture that works everywhere:
- *  • live viewfinder via getUserMedia when the browser allows it
- *  • otherwise the native camera through <input capture>, which is what iOS
- *    Safari in a non-installed web app tends to give you anyway.
+ * Photo capture.
  *
- * Pass `ghost` (a data URL) to overlay a previous photo on the viewfinder so the
- * shot can be lined up exactly. This matters more than it sounds: the photo
- * check in lib/ai.js compares a 16×16 structural grid, so a shot taken from a
- * different corner of the room scores badly even when the room is spotless.
- * Aligning the two photos is the single biggest thing a person can do to make
- * the AI verdict trustworthy.
+ * Two paths, chosen by whether there's something to line the shot up against:
+ *
+ *  • No ghost → hand off to the system camera. It's full screen, familiar,
+ *    handles focus/flash/HDR properly, and gives a better image than anything
+ *    a <video> preview can. There's no reason to reimplement it.
+ *
+ *  • Ghost → our own viewfinder, because iOS can't overlay a reference photo on
+ *    its camera. That runs FULL SCREEN rather than in a box inside a sheet:
+ *    lining up a shot in a 200px window is the whole reason people give up on
+ *    matching the angle.
+ *
+ * Either way there's a Photos/Files route that opens the standard iOS sheet.
  */
 export default function CameraCapture({
   value,
@@ -33,7 +37,7 @@ export default function CameraCapture({
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
-  // Overlay controls
+  // Overlay controls (ghost mode only)
   const [overlay, setOverlay] = useState(ghost ? 'ghost' : 'off') // off | ghost | diff
   const [opacity, setOpacity] = useState(45)
   const [grid, setGrid] = useState(false)
@@ -47,21 +51,38 @@ export default function CameraCapture({
 
   useEffect(() => () => stopStream(), [])
 
+  // Escape closes the full-screen viewfinder.
+  useEffect(() => {
+    if (!live) return
+    const onKey = (e) => e.key === 'Escape' && stopStream()
+    document.addEventListener('keydown', onKey)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = ''
+    }
+  }, [live])
+
   function stopStream() {
     streamRef.current?.getTracks().forEach((t) => t.stop())
     streamRef.current = null
     setLive(false)
   }
 
-  async function startStream() {
+  /** The shoot button. Native camera unless we need to draw a ghost. */
+  function takePhoto() {
     setError('')
-    if (!hasLiveCamera()) {
+    if (!ghost || !hasLiveCamera()) {
       camRef.current?.click()
       return
     }
+    startStream()
+  }
+
+  async function startStream() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 } },
         audio: false,
       })
       streamRef.current = stream
@@ -73,14 +94,14 @@ export default function CameraCapture({
         }
       })
     } catch {
-      setError('Camera blocked — opening the photo picker instead.')
-      libRef.current?.click()
+      setError('Camera blocked — using the system camera instead.')
+      camRef.current?.click()
     }
   }
 
   function shoot() {
     if (!videoRef.current) return
-    const data = grabFrame(videoRef.current)
+    const data = grabFrame(videoRef.current, 1080)
     stopStream()
     onChange(data)
   }
@@ -102,7 +123,7 @@ export default function CameraCapture({
 
   return (
     <div>
-      {/* Straight to the camera — only used when the live viewfinder can't run. */}
+      {/* Straight to the camera — the system UI, full screen. */}
       <input
         ref={camRef}
         type="file"
@@ -126,76 +147,13 @@ export default function CameraCapture({
             <img src={value} alt="Captured" />
           </div>
           <div className="row" style={{ marginTop: 10 }}>
-            <button className="btn sm grow" onClick={() => { onChange(null); startStream() }}>🔄 Retake</button>
+            <button className="btn sm grow" onClick={() => { onChange(null); takePhoto() }}>🔄 Retake</button>
             <button className="btn sm grow" onClick={() => libRef.current?.click()}>🖼️ Photos or files</button>
           </div>
         </>
-      ) : live ? (
-        <>
-          <div className={`camwrap ${overlay === 'diff' ? 'diffmode' : ''}`}>
-            <video ref={videoRef} playsInline muted />
-
-            {ghost && overlay !== 'off' && (
-              <img
-                src={ghost}
-                alt=""
-                className={`ghost ${overlay}`}
-                style={{ opacity: overlay === 'diff' ? 1 : opacity / 100 }}
-              />
-            )}
-
-            {grid && (
-              <div className="camgrid" aria-hidden>
-                <i /><i /><i /><i />
-              </div>
-            )}
-
-            <div className="hint">
-              {ghost && overlay !== 'off'
-                ? overlay === 'diff'
-                  ? 'Move until the ghosting disappears'
-                  : `Line the room up with ${ghostLabel}`
-                : hint}
-            </div>
-          </div>
-
-          {ghost && (
-            <div className="ghostbar">
-              <div className="chipgroup">
-                <button className={`chip ${overlay === 'ghost' ? 'on' : ''}`} onClick={() => setOverlay('ghost')}>
-                  👻 Ghost
-                </button>
-                <button className={`chip ${overlay === 'diff' ? 'on' : ''}`} onClick={() => setOverlay('diff')}>
-                  🔍 Difference
-                </button>
-                <button className={`chip ${overlay === 'off' ? 'on' : ''}`} onClick={() => setOverlay('off')}>
-                  🚫 Off
-                </button>
-                <button className={`chip ${grid ? 'on' : ''}`} onClick={() => setGrid((g) => !g)}>
-                  # Grid
-                </button>
-              </div>
-              {overlay === 'ghost' && (
-                <label className="ghostslider">
-                  <span className="tiny">Fade</span>
-                  <input
-                    type="range"
-                    min="10"
-                    max="85"
-                    value={opacity}
-                    onChange={(e) => setOpacity(Number(e.target.value))}
-                  />
-                </label>
-              )}
-            </div>
-          )}
-
-          <button className="shutter" onClick={shoot} aria-label="Take photo"><i /></button>
-          <button className="btn ghost sm wide" style={{ marginTop: 8 }} onClick={stopStream}>Cancel</button>
-        </>
       ) : (
         <div className={compact ? 'row' : 'stack'}>
-          <button className="btn primary xl grow" onClick={startStream} disabled={busy}>
+          <button className="btn primary xl grow" onClick={takePhoto} disabled={busy}>
             📸 {busy ? 'Working…' : ghost ? 'Line up the shot' : 'Take a photo'}
           </button>
           <button className="btn grow" onClick={() => libRef.current?.click()} disabled={busy}>
@@ -206,12 +164,62 @@ export default function CameraCapture({
 
       {ghost && !live && !value && (
         <p className="tiny" style={{ marginTop: 8 }}>
-          👻 The camera will show a faded version of {ghostLabel} so you can match the angle exactly.
-          The closer the match, the more the AI check can tell.
+          👻 The camera fills the screen and fades {ghostLabel} over it, so you can match the angle
+          exactly. The closer the match, the more the AI check can tell.
         </p>
       )}
 
       {error && <p className="tiny" style={{ marginTop: 8, color: 'var(--warn)' }}>{error}</p>}
+
+      {live && createPortal(
+        <div className="camfull">
+          <video ref={videoRef} playsInline muted />
+
+          {ghost && overlay !== 'off' && (
+            <img
+              src={ghost}
+              alt=""
+              className={`ghost ${overlay}`}
+              style={{ opacity: overlay === 'diff' ? 1 : opacity / 100 }}
+            />
+          )}
+
+          {grid && <div className="camgrid" aria-hidden><i /><i /><i /><i /></div>}
+
+          <div className="camtop">
+            <button className="btn sm" onClick={stopStream}>✕ Cancel</button>
+            <span className="camhint">
+              {overlay === 'diff'
+                ? 'Move until the ghosting disappears'
+                : overlay === 'ghost'
+                  ? `Line it up with ${ghostLabel}`
+                  : hint}
+            </span>
+          </div>
+
+          <div className="cambottom">
+            {ghost && (
+              <>
+                <div className="chipgroup" style={{ justifyContent: 'center' }}>
+                  <button className={`chip ${overlay === 'ghost' ? 'on' : ''}`} onClick={() => setOverlay('ghost')}>👻 Ghost</button>
+                  <button className={`chip ${overlay === 'diff' ? 'on' : ''}`} onClick={() => setOverlay('diff')}>🔍 Difference</button>
+                  <button className={`chip ${overlay === 'off' ? 'on' : ''}`} onClick={() => setOverlay('off')}>🚫 Off</button>
+                  <button className={`chip ${grid ? 'on' : ''}`} onClick={() => setGrid((g) => !g)}># Grid</button>
+                </div>
+                {overlay === 'ghost' && (
+                  <label className="ghostslider" style={{ maxWidth: 320, margin: '10px auto 0' }}>
+                    <span className="tiny">Fade</span>
+                    <input type="range" min="10" max="85" value={opacity}
+                      onChange={(e) => setOpacity(Number(e.target.value))} />
+                  </label>
+                )}
+              </>
+            )}
+            <button className="shutter" onClick={shoot} aria-label="Take photo"><i /></button>
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   )
 }
