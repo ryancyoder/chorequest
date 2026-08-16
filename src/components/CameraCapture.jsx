@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { downscale, fileToDataUrl, grabFrame, hasLiveCamera } from '../lib/camera.js'
+import { createAligner } from '../lib/vision.js'
 
 /**
  * Photo capture.
@@ -34,8 +35,18 @@ export default function CameraCapture({
   const libRef = useRef(null)
   const streamRef = useRef(null)
   const [live, setLive] = useState(false)
+  const [ready, setReady] = useState(false)     // the video is actually playing
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+
+  // Auto-snap: watch the frame and fire the shutter once it's held steady.
+  const [autoSnap, setAutoSnap] = useState(true)
+  const [align, setAlign] = useState(null)
+  const [holdPct, setHoldPct] = useState(0)
+  const alignerRef = useRef(null)
+  const holdRef = useRef(0)
+  const firedRef = useRef(false)
+  const timerRef = useRef(null)
 
   // Overlay controls (ghost mode only)
   const [overlay, setOverlay] = useState(ghost ? 'ghost' : 'off') // off | ghost | diff
@@ -86,18 +97,41 @@ export default function CameraCapture({
         audio: false,
       })
       streamRef.current = stream
-      setLive(true)
-      requestAnimationFrame(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-          videoRef.current.play().catch(() => {})
-        }
-      })
+      setReady(false)
+      setLive(true)   // the <video> is created by the render this triggers
     } catch {
       setError('Camera blocked — using the system camera instead.')
       camRef.current?.click()
     }
   }
+
+  /*
+   * Attaching the stream belongs in an effect, not in a callback after
+   * setLive(). The <video> only exists once React has committed the render that
+   * `live` triggers, and a requestAnimationFrame is not guaranteed to land
+   * after that commit — it won the race sometimes and lost it others, which is
+   * precisely what made the viewfinder load unpredictably. Effects run after
+   * commit with refs attached, every time.
+   */
+  useEffect(() => {
+    if (!live) return
+    const video = videoRef.current
+    const stream = streamRef.current
+    if (!video || !stream) return
+
+    video.srcObject = stream
+    const onReady = () => setReady(true)
+    video.addEventListener('loadedmetadata', onReady)
+    video.addEventListener('canplay', onReady)
+    video.play().catch(() => {})
+    // Safari occasionally has metadata before the listener is attached.
+    if (video.videoWidth) setReady(true)
+
+    return () => {
+      video.removeEventListener('loadedmetadata', onReady)
+      video.removeEventListener('canplay', onReady)
+    }
+  }, [live])
 
   function shoot() {
     if (!videoRef.current) return
@@ -105,6 +139,60 @@ export default function CameraCapture({
     stopStream()
     onChange(data)
   }
+
+  /*
+   * The auto-snap loop, modelled on the iOS document scanner: sample the frame
+   * a few times a second, report how close the shot is, and once it has been
+   * lined up for HOLD_MS without wobbling, take it. Holding steady matters —
+   * firing the instant it crosses the line catches the frame mid-swing.
+   */
+  useEffect(() => {
+    if (!live || !ready || !ghost || !autoSnap) return
+
+    const HOLD_MS = 700
+    const TICK = 110
+    let cancelled = false
+    holdRef.current = 0
+    firedRef.current = false
+
+    ;(async () => {
+      try {
+        alignerRef.current = await createAligner(ghost)
+      } catch {
+        return   // fall back to the manual shutter
+      }
+      if (cancelled) return
+
+      const id = setInterval(() => {
+        if (cancelled || firedRef.current) return
+        const res = alignerRef.current?.track(videoRef.current)
+        if (!res) return
+        setAlign(res)
+
+        if (res.locked) {
+          holdRef.current += TICK
+          setHoldPct(Math.min(100, (holdRef.current / HOLD_MS) * 100))
+          if (holdRef.current >= HOLD_MS) {
+            firedRef.current = true
+            clearInterval(id)
+            shoot()
+          }
+        } else {
+          holdRef.current = 0
+          setHoldPct(0)
+        }
+      }, TICK)
+
+      timerRef.current = id
+    })()
+
+    return () => {
+      cancelled = true
+      clearInterval(timerRef.current)
+      setAlign(null)
+      setHoldPct(0)
+    }
+  }, [live, ready, ghost, autoSnap])
 
   async function onFile(e) {
     const file = e.target.files?.[0]
@@ -186,16 +274,43 @@ export default function CameraCapture({
 
           {grid && <div className="camgrid" aria-hidden><i /><i /><i /><i /></div>}
 
+          {!ready && (
+            <div className="camloading">
+              <div className="scanner">📷</div>
+              <p className="muted" style={{ marginTop: 12 }}>Waking the camera…</p>
+            </div>
+          )}
+
           <div className="camtop">
             <button className="btn sm" onClick={stopStream}>✕ Cancel</button>
             <span className="camhint">
-              {overlay === 'diff'
-                ? 'Move until the ghosting disappears'
-                : overlay === 'ghost'
-                  ? `Line it up with ${ghostLabel}`
-                  : hint}
+              {align
+                ? align.locked
+                  ? 'Hold it there…'
+                  : align.nudge.x || align.nudge.y
+                    ? `Move ${[align.nudge.y, align.nudge.x].filter(Boolean).join(' and ')}`
+                    : 'Nearly — steady now'
+                : overlay === 'diff'
+                  ? 'Move until the ghosting disappears'
+                  : overlay === 'ghost'
+                    ? `Line it up with ${ghostLabel}`
+                    : hint}
             </span>
           </div>
+
+          {/* Alignment target, in the spirit of the iOS document scanner. */}
+          {ghost && autoSnap && ready && (
+            <div className={`camlock ${align?.locked ? 'locked' : ''}`}>
+              <svg viewBox="0 0 100 100" aria-hidden>
+                <circle className="ring-bg" cx="50" cy="50" r="46" />
+                <circle
+                  className="ring-fill" cx="50" cy="50" r="46"
+                  style={{ strokeDashoffset: 289 - (289 * holdPct) / 100 }}
+                />
+              </svg>
+              <span className="lockicon">{align?.locked ? '🎯' : '⌖'}</span>
+            </div>
+          )}
 
           <div className="cambottom">
             {ghost && (
@@ -213,8 +328,20 @@ export default function CameraCapture({
                       onChange={(e) => setOpacity(Number(e.target.value))} />
                   </label>
                 )}
+
+                <div className="chipgroup" style={{ justifyContent: 'center', marginTop: 8 }}>
+                  <button className={`chip ${autoSnap ? 'on' : ''}`} onClick={() => setAutoSnap((a) => !a)}>
+                    {autoSnap ? '🎯 Auto-snap on' : '🎯 Auto-snap off'}
+                  </button>
+                  {align && (
+                    <span className="chip" style={{ pointerEvents: 'none' }}>
+                      {align.locked ? 'Lined up' : `${Math.max(0, 100 - Math.round(align.distance * 9))}% there`}
+                    </span>
+                  )}
+                </div>
               </>
             )}
+            {/* The manual shutter never goes away — auto-snap assists, it doesn't trap. */}
             <button className="shutter" onClick={shoot} aria-label="Take photo"><i /></button>
           </div>
         </div>,
