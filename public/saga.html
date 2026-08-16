@@ -192,6 +192,16 @@ body{
   .stage *{ animation-duration:.01ms !important; animation-iteration-count:1 !important }
 }
 
+/* ═══════════════ embedded in the app ═══════════════
+   Opened inside ChoreQuest the page chrome is redundant and the light ground
+   fights the app around it, so this becomes a bare player on the app's own
+   night palette. */
+:root.embed{ --page:#0a0818; --page-ink:#efe9f5; --page-dim:#9a92b8; --page-line:#241d45; }
+.embed body{ padding:12px 12px 28px; gap:12px }
+.embed .masthead, .embed .foot{ display:none }
+.embed .cabinet, .embed .transport, .embed .chapters{ width:100% }
+.embed .screen{ border-radius:10px }
+
 /* ═══════════════ scene-specific ═══════════════ */
 
 /* 1 realm */
@@ -337,6 +347,11 @@ body{
 .in-fade{ animation:inFade .9s ease both }
 @keyframes inFade{ from{ opacity:0 } }
 </style>
+
+<script>
+  // Set before first paint so there's no flash of the standalone page chrome.
+  if (location.search.indexOf('embed') !== -1) document.documentElement.classList.add('embed');
+</script>
 
 <div class="masthead">
   <div>

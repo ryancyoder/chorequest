@@ -629,6 +629,25 @@ label.field > span { display: block; font-size: 12px; font-weight: 800; text-tra
   background: linear-gradient(100deg, #ffd60a14, var(--card));
 }
 
+/* Full-screen in-app player, so the home-screen app never hands you to Safari. */
+.sagaviewer {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; flex-direction: column;
+  background: #0a0818;
+  animation: fade .2s;
+}
+.sagabar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 14px 10px;
+  background: rgba(11, 9, 28, .96);
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+.sagaframe {
+  flex: 1 1 auto; width: 100%; border: 0; display: block;
+  background: #0a0818;
+}
+
 /* ═══════════════════════ ⚔️ boss battle ═══════════════════════ */
 
 .boss {

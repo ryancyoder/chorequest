@@ -3,6 +3,7 @@ import { useApp } from '../store/AppContext.jsx'
 import { Sheet, Ring, timeAgo } from '../components/ui.jsx'
 import RecordsPanel from '../components/RecordsPanel.jsx'
 import KindnessWall from '../components/KindnessWall.jsx'
+import SagaViewer from '../components/SagaViewer.jsx'
 import { leaderboard, byId, dayStats, memberProgress } from '../store/selectors.js'
 import { BADGES } from '../lib/gamify.js'
 import { todayISO } from '../lib/date.js'
@@ -13,6 +14,7 @@ export default function Family({ go }) {
   const me = app.currentMember
   const board = leaderboard(state)
   const [open, setOpen] = useState(null)
+  const [saga, setSaga] = useState(false)
 
   const podium = board.slice(0, 3)
   const rest = board.slice(3)
@@ -88,12 +90,10 @@ export default function Family({ go }) {
         })}
       </div>
 
-      <a
+      <button
         className="card tap sagalink"
-        href="./saga.html"
-        target="_blank"
-        rel="noopener"
-        style={{ display: 'block', textDecoration: 'none', color: 'inherit', marginTop: 12 }}
+        onClick={() => setSaga(true)}
+        style={{ display: 'block', width: '100%', textAlign: 'left', marginTop: 12 }}
       >
         <div className="row">
           <span style={{ fontSize: 26 }}>⚔️</span>
@@ -105,7 +105,7 @@ export default function Family({ go }) {
           </div>
           <span style={{ fontSize: 20, opacity: .5 }}>›</span>
         </div>
-      </a>
+      </button>
 
       <KindnessWall />
 
@@ -135,6 +135,7 @@ export default function Family({ go }) {
       </div>
 
       <MemberSheet member={open} onClose={() => setOpen(null)} />
+      <SagaViewer open={saga} onClose={() => setSaga(false)} />
     </div>
   )
 }
