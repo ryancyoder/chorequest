@@ -449,6 +449,31 @@ function AiTab({ app }) {
             </div>
           )}
 
+          {result.diag && (
+            <>
+              <div className="tiny" style={{ margin: '16px 0 8px' }}>THE NUMBERS BEHIND IT</div>
+              <div className="card" style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11.5 }}>
+                {[
+                  ['same-place cost', result.diag.alignCost?.toFixed(3), '< 0.30 = same place'],
+                  ['drift', result.diag.drift?.toFixed(1) + 'px', '< 8 = close enough'],
+                  ['noise floor', result.diag.noiseFloor?.toFixed(3), 'this pair’s baseline'],
+                  ['threshold', result.diag.tol?.toFixed(3), 'set from the floor'],
+                  ['pixels changed', result.diag.changedPct?.toFixed(1) + '%', ''],
+                  ['objects area', result.diag.areaPct?.toFixed(2) + '%', 'vs bands 1.0 / 2.2'],
+                ].map(([k, v, note]) => (
+                  <div className="spread" key={k} style={{ padding: '3px 0' }}>
+                    <span style={{ color: 'var(--ink-dim)' }}>{k}</span>
+                    <span><b>{v}</b>{note && <span className="tiny" style={{ marginLeft: 8 }}>{note}</span>}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="tiny" style={{ marginTop: 8 }}>
+                If a verdict looks wrong on a real photo, these are the numbers to report — they say
+                exactly which threshold made the call.
+              </p>
+            </>
+          )}
+
           {result.findings?.length > 0 && (
             <>
               <div className="tiny" style={{ margin: '16px 0 8px' }}>WHAT IT SPOTTED</div>

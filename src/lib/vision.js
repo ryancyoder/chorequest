@@ -333,26 +333,56 @@ export async function analysePair(beforeSrc, afterSrc, { sensitivity = 'normal' 
 
   const off = findOffset(A, B)
 
-  // Sensitivity moves the bar for "that's a thing" vs "that's noise".
-  const TOL = { strict: 0.085, normal: 0.115, relaxed: 0.16 }[sensitivity] ?? 0.115
-
-  const changed = new Uint8Array(SIZE * SIZE)
-  let changedCount = 0, considered = 0
-
+  /*
+   * The threshold adapts to the pair rather than being a constant.
+   *
+   * A fixed number was tuned against flat synthetic renders and does not
+   * survive real photographs. Real rooms have depth, so moving the camera an
+   * inch shifts foreground and background by different amounts — parallax that
+   * a translation can't undo. Add sensor noise, JPEG artefacts and auto-exposure
+   * and the baseline difference between two honest photos of the same tidy
+   * worktop is far above anything a clean render produces.
+   *
+   * So: measure this pair's own noise floor and flag what stands clear of it.
+   * The median is the floor, the spread above it sets the scale, and an
+   * absolute minimum stops an identical pair from finding "objects" in its own
+   * sensor grain.
+   */
+  const samples = []
   for (let y = SEARCH; y < SIZE - SEARCH; y++) {
     for (let x = SEARCH; x < SIZE - SEARCH; x++) {
-      const i = y * SIZE + x
-      const j = (y + off.dy) * SIZE + (x + off.dx)
-      considered++
-      if (pixelChange(A, B, i, j) > TOL) { changed[i] = 1; changedCount++ }
+      samples.push(pixelChange(A, B, y * SIZE + x, (y + off.dy) * SIZE + (x + off.dx)))
+    }
+  }
+  const sorted = Float64Array.from(samples).sort()
+  const at = (p) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))]
+  const p50 = at(0.50)
+  const p90 = at(0.90)
+
+  const K = { strict: 1.8, normal: 2.6, relaxed: 3.6 }[sensitivity] ?? 2.6
+  const FLOOR = { strict: 0.075, normal: 0.10, relaxed: 0.14 }[sensitivity] ?? 0.10
+  const TOL = Math.max(FLOOR, p50 + K * (p90 - p50))
+
+  const changed = new Uint8Array(SIZE * SIZE)
+  let changedCount = 0
+  let idx = 0
+  for (let y = SEARCH; y < SIZE - SEARCH; y++) {
+    for (let x = SEARCH; x < SIZE - SEARCH; x++) {
+      if (samples[idx++] > TOL) { changed[y * SIZE + x] = 1; changedCount++ }
     }
   }
 
-  const changedPct = (changedCount / considered) * 100
+  const changedPct = (changedCount / samples.length) * 100
 
-  // Almost the entire frame moved: this isn't the same place, so there's
-  // nothing meaningful to say about tidiness.
-  const sameScene = changedPct < 42
+  /*
+   * "Is this the same place" comes from how well the best offset fits, not from
+   * counting changed pixels. Counting conflates a genuinely different room with
+   * a familiar one that simply has a lot of stuff in it — which is why a real
+   * photo of the right worktop kept being dismissed as somewhere else. The
+   * capped alignment cost is built to be robust to content, so it answers this
+   * question properly.
+   */
+  const sameScene = off.cost < 0.30
 
   /*
    * Deliberately NOT split into "added" and "removed".
@@ -375,7 +405,11 @@ export async function analysePair(beforeSrc, afterSrc, { sensitivity = 'normal' 
     aligned: sameScene,
     sameScene,
     changedPct,
-    matchQuality: Math.max(0, Math.min(100, Math.round(100 - changedPct * 1.9))),
+    // Same source of truth as sameScene, so the number shown to a person and
+    // the decision made by the code can't disagree.
+    matchQuality: Math.max(0, Math.min(100, Math.round((1 - off.cost / 0.34) * 100))),
+    // Surfaced for the parent-facing diagnostics in the AI playground.
+    diagnostics: { alignCost: off.cost, tol: TOL, noiseFloor: p50, spread: p90 - p50 },
     changes: { areaPct: blobs.reduce((n, b) => n + b.areaPct, 0), blobs },
     lightingShift: Math.abs(A.brightness - B.brightness),
   }

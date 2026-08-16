@@ -65,6 +65,9 @@ export async function checkCompletionPhoto({
   const a = await analysePair(referencePhoto, submittedPhoto, { sensitivity })
   const band = BANDS[sensitivity] ?? BANDS.normal
   const drift = Math.hypot(a.offset.dx, a.offset.dy)
+  // Computed before any verdict returns, so every outcome — including the ones
+  // that give up — can report the numbers behind the decision.
+  const diag = { ...a.diagnostics, changedPct: a.changedPct, drift, areaPct: a.changes.areaPct }
 
   const signals = [
     { label: 'Same place', value: a.matchQuality },
@@ -95,7 +98,7 @@ export async function checkCompletionPhoto({
       detail: lighting
         ? 'The two photos are lit so differently that nothing useful can be compared. Try again in similar light, or send it to a parent as is.'
         : "This doesn't line up with the reference photo at all. Try again from roughly where the example was taken.",
-      signals, findings: [], checklist, canEscalate: true,
+      signals, findings: [], checklist, canEscalate: true, diag,
     }
   }
 
@@ -121,7 +124,7 @@ export async function checkCompletionPhoto({
       headline: 'Nothing left out',
       detail: 'Surfaces match the finished photo — nothing sitting out that shouldn\'t be. Sent to a parent for the final OK.',
       // Below the clean bar, whatever turned up is noise, so don't parade it.
-      signals, findings: [], checklist, canEscalate: true,
+      signals, findings: [], checklist, canEscalate: true, diag,
     }
   }
 
@@ -130,7 +133,7 @@ export async function checkCompletionPhoto({
       pass: false, outcome: 'cluttered', score,
       headline: `${countPhrase(found.length)} still out`,
       detail: `There's something on ${describeRegions(found)} that isn't in the finished photo. Put it away and shoot it again from the same spot.`,
-      signals, findings: found, checklist, canEscalate: true,
+      signals, findings: found, checklist, canEscalate: true, diag,
     }
   }
 
@@ -141,7 +144,7 @@ export async function checkCompletionPhoto({
     detail: found.length
       ? `Nearly there. There's a little something around ${describeRegions(found, 1)}, so a parent should be the judge.`
       : 'Close to the finished photo. A parent should take the final look.',
-    signals, findings: found, checklist, canEscalate: true,
+    signals, findings: found, checklist, canEscalate: true, diag,
   }
 }
 
