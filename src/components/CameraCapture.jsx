@@ -23,7 +23,11 @@ export default function CameraCapture({
   ghostLabel = 'the original shot',
 }) {
   const videoRef = useRef(null)
-  const fileRef = useRef(null)
+  // Two inputs, because a single one can't do both jobs on iOS: the presence of
+  // `capture` sends you straight to the camera and skips the system sheet
+  // entirely. Without it, iOS offers Photo Library / Take Photo / Choose File.
+  const camRef = useRef(null)
+  const libRef = useRef(null)
   const streamRef = useRef(null)
   const [live, setLive] = useState(false)
   const [error, setError] = useState('')
@@ -52,7 +56,7 @@ export default function CameraCapture({
   async function startStream() {
     setError('')
     if (!hasLiveCamera()) {
-      fileRef.current?.click()
+      camRef.current?.click()
       return
     }
     try {
@@ -69,8 +73,8 @@ export default function CameraCapture({
         }
       })
     } catch {
-      setError('Camera blocked — using the photo picker instead.')
-      fileRef.current?.click()
+      setError('Camera blocked — opening the photo picker instead.')
+      libRef.current?.click()
     }
   }
 
@@ -98,11 +102,20 @@ export default function CameraCapture({
 
   return (
     <div>
+      {/* Straight to the camera — only used when the live viewfinder can't run. */}
       <input
-        ref={fileRef}
+        ref={camRef}
         type="file"
         accept="image/*"
         capture="environment"
+        onChange={onFile}
+        style={{ display: 'none' }}
+      />
+      {/* No `capture`, so iOS shows its standard Photos / Camera / Files sheet. */}
+      <input
+        ref={libRef}
+        type="file"
+        accept="image/*"
         onChange={onFile}
         style={{ display: 'none' }}
       />
@@ -114,7 +127,7 @@ export default function CameraCapture({
           </div>
           <div className="row" style={{ marginTop: 10 }}>
             <button className="btn sm grow" onClick={() => { onChange(null); startStream() }}>🔄 Retake</button>
-            <button className="btn sm grow" onClick={() => fileRef.current?.click()}>🖼️ Choose another</button>
+            <button className="btn sm grow" onClick={() => libRef.current?.click()}>🖼️ Photos or files</button>
           </div>
         </>
       ) : live ? (
@@ -185,8 +198,8 @@ export default function CameraCapture({
           <button className="btn primary xl grow" onClick={startStream} disabled={busy}>
             📸 {busy ? 'Working…' : ghost ? 'Line up the shot' : 'Take a photo'}
           </button>
-          <button className="btn grow" onClick={() => fileRef.current?.click()} disabled={busy}>
-            🖼️ Pick from library
+          <button className="btn grow" onClick={() => libRef.current?.click()} disabled={busy}>
+            🖼️ Photos or files
           </button>
         </div>
       )}
