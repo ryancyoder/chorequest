@@ -1,0 +1,7 @@
+name = "chorequest-photo-check"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+# The API key is NOT set here. Secrets never belong in a file that gets
+# committed. Set it once with:
+#   npx wrangler secret put ANTHROPIC_API_KEY

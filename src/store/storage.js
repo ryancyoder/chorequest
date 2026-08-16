@@ -31,6 +31,7 @@ function migrate(state) {
     soundOn: true,
     layoutMode: 'auto',
     aiSensitivity: 'normal',
+    photoCheckUrl: '',
     ...(s.settings || {}),
   }
   s.settings.landmineRates = { ...DEFAULT_RATES, ...(s.settings.landmineRates || {}) }

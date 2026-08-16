@@ -33,6 +33,7 @@ export default function DefuseSheet({ open, onClose, mine, member }) {
       result = await checkDefusePhoto({
         messPhoto: before, defusePhoto: photo, title: mine.title,
         sensitivity: app.state.settings.aiSensitivity || 'normal',
+        endpoint: app.state.settings.photoCheckUrl || null,
       })
     } catch (err) {
       result = {

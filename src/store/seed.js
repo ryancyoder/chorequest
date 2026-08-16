@@ -214,6 +214,7 @@ export function buildSeed() {
       layoutMode: 'auto', // 'auto' | 'phone' | 'tablet'
       landmineRates: { ...DEFAULT_RATES },
       aiSensitivity: 'normal', // 'strict' | 'normal' | 'relaxed'
+      photoCheckUrl: '',       // set in Manage > AI check once the worker is deployed
     },
   }
 }

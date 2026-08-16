@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Sheet, Confetti } from './ui.jsx'
 import CameraCapture from './CameraCapture.jsx'
 import { useApp } from '../store/AppContext.jsx'
-import { checkCompletionPhoto, askForHelp } from '../lib/ai.js'
+import { checkCompletionPhoto } from '../lib/ai.js'
 import { putPhoto, photoUrl } from '../lib/photos.js'
 
 /**
@@ -16,19 +16,6 @@ export default function ProofSheet({ open, onClose, kind, target, member, dateIS
   const [step, setStep] = useState('shoot') // shoot | checking | result
   const [verdict, setVerdict] = useState(null)
   const [note, setNote] = useState('')
-  const [help, setHelp] = useState(null)
-  const [helping, setHelping] = useState(false)
-
-  /** Tier two: hand it to a real vision model, if one is connected. */
-  async function askHelp() {
-    setHelping(true)
-    setHelp(await askForHelp({
-      referencePhoto: reference, submittedPhoto: photo,
-      title: target.title, checklist: target.checklist || [],
-    }))
-    setHelping(false)
-  }
-
   const reference = target ? photoUrl(target.referencePhotoId) : null
 
   function reset() {
@@ -53,6 +40,7 @@ export default function ProofSheet({ open, onClose, kind, target, member, dateIS
         title: target.title,
         checklist: target.checklist || [],
         sensitivity: app.state.settings.aiSensitivity || 'normal',
+        endpoint: app.state.settings.photoCheckUrl || null,
       })
     } catch (err) {
       result = {
@@ -135,7 +123,9 @@ export default function ProofSheet({ open, onClose, kind, target, member, dateIS
           <div className="scanner">🔍</div>
           <h3 style={{ marginTop: 16 }}>Comparing your photo…</h3>
           <p className="muted center" style={{ maxWidth: 280 }}>
-            Checking layout, edges and colors against the finished standard.
+            {app.state.settings.photoCheckUrl
+              ? 'Looking at both photos against what counts as done.'
+              : 'Checking it against the finished standard on this device.'}
           </p>
         </div>
       )}
@@ -154,20 +144,29 @@ export default function ProofSheet({ open, onClose, kind, target, member, dateIS
             <p>{verdict.detail}</p>
           </div>
 
-          {verdict.canEscalate && (
-            <button
-              className="btn wide"
-              style={{ marginTop: 12 }}
-              onClick={askHelp}
-              disabled={helping}
-            >
-              {helping ? '🛰️ Asking…' : '🛰️ Ask for extra help'}
-            </button>
+          {/* The point of the service: your checklist, answered item by item. */}
+          {verdict.checklistResults?.length > 0 && (
+            <div className="card" style={{ marginTop: 12 }}>
+              <div className="tiny" style={{ marginBottom: 8 }}>YOUR CHECKLIST</div>
+              {verdict.checklistResults.map((c, i) => (
+                <div key={i} className="row" style={{ alignItems: 'flex-start', padding: '5px 0' }}>
+                  <span style={{ fontSize: 15 }}>{c.ok ? '✅' : '❌'}</span>
+                  <div className="grow">
+                    <div style={{ fontSize: 13, fontWeight: 700 }}>{c.item}</div>
+                    {c.why && <div className="tiny" style={{ marginTop: 2 }}>{c.why}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
-          {help && (
-            <div className={`card ${help.unavailable ? '' : 'glow'}`} style={{ marginTop: 10 }}>
-              <b style={{ fontSize: 14 }}>{help.headline}</b>
-              <p className="muted" style={{ margin: '4px 0 0' }}>{help.detail}</p>
+
+          {/* Anything not stamped by the service was judged on the device —
+              safer to test for the positive case than to rely on every local
+              return path remembering to label itself. */}
+          {verdict.engine !== 'claude' && app.state.settings.photoCheckUrl && (
+            <div className="warnbox" style={{ marginTop: 12 }}>
+              Couldn't reach the checking service, so this was judged on the device instead — less
+              reliable. A parent will have the final say either way.
             </div>
           )}
 

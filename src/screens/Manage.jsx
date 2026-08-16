@@ -351,6 +351,81 @@ function MemberEditor({ draft, onClose, onSave, onDelete, count }) {
 
 /* ─────────────────────────── AI playground ─────────────────────────── */
 
+/**
+ * Connecting the Claude-backed checker. The URL lives in settings rather than
+ * the bundle so it can be changed on the device — no rebuild, no redeploy.
+ */
+function ServiceSetup({ app }) {
+  const saved = app.state.settings.photoCheckUrl || ''
+  const [url, setUrl] = useState(saved)
+  const [testing, setTesting] = useState(false)
+  const [result, setResult] = useState(null)
+
+  async function test() {
+    setTesting(true)
+    setResult(null)
+    try {
+      const res = await fetch(url.trim(), { method: 'GET' })
+      const data = await res.json()
+      if (data?.ok && data?.keySet) {
+        app.setSetting('photoCheckUrl', url.trim())
+        setResult({ good: true, msg: `Connected · ${data.model}` })
+      } else if (data?.ok && !data.keySet) {
+        setResult({ good: false, msg: 'Reached the service, but its API key isn’t set. Run: npx wrangler secret put ANTHROPIC_API_KEY' })
+      } else {
+        setResult({ good: false, msg: 'That address answered, but it isn’t the photo-check service.' })
+      }
+    } catch {
+      setResult({ good: false, msg: 'Couldn’t reach that address. Check the URL and that the worker is deployed.' })
+    }
+    setTesting(false)
+  }
+
+  return (
+    <div className="card">
+      {saved ? (
+        <div className="spread" style={{ marginBottom: 10 }}>
+          <span className="badge-status good">✅ Claude vision is doing the checking</span>
+          <button className="btn sm ghost" onClick={() => { app.setSetting('photoCheckUrl', ''); setUrl(''); setResult(null) }}>
+            Disconnect
+          </button>
+        </div>
+      ) : (
+        <p className="muted" style={{ marginTop: 0 }}>
+          Without this, checking runs on the device — free and instant, but easily fooled by camera
+          angle and lighting. Connect the service and a real vision model judges the photo against
+          your checklist instead.
+        </p>
+      )}
+
+      <label className="field">
+        <span>Service address</span>
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://chorequest-photo-check.you.workers.dev"
+          autoCapitalize="off" autoCorrect="off" spellCheck="false"
+        />
+      </label>
+
+      <button className="btn primary wide" onClick={test} disabled={!url.trim() || testing}>
+        {testing ? 'Testing…' : '🔌 Test and connect'}
+      </button>
+
+      {result && (
+        <div className={result.good ? 'card' : 'warnbox'} style={{ marginTop: 10 }}>
+          {result.good ? '✅ ' : '⚠️ '}{result.msg}
+        </div>
+      )}
+
+      <p className="tiny" style={{ marginTop: 10 }}>
+        Setting one up takes three commands — see <code>server/README.md</code>. It runs on
+        Cloudflare's free tier and costs well under a penny per check.
+      </p>
+    </div>
+  )
+}
+
 function AiTab({ app }) {
   const [ref, setRef] = useState(null)
   const [shot, setShot] = useState(null)
@@ -364,6 +439,7 @@ function AiTab({ app }) {
       setResult(await checkCompletionPhoto({
         referencePhoto: ref, submittedPhoto: shot, title: 'test', checklist: [],
         sensitivity: app.state.settings.aiSensitivity || 'normal',
+        endpoint: app.state.settings.photoCheckUrl || null,
       }))
     } catch (e) {
       setResult({ pass: false, score: 0, headline: 'Error', detail: e.message, signals: [], regions: [] })
@@ -373,6 +449,9 @@ function AiTab({ app }) {
 
   return (
     <>
+      <div className="section-title">Photo checking service</div>
+      <ServiceSetup app={app} />
+
       <div className="section-title">How picky should it be?</div>
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="chipgroup">

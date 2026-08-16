@@ -206,9 +206,34 @@ approval — a raid is synchronous, in one house, with a parent present, and a
 review queue would kill it. Parents can reverse any hit. HP is always derived
 from landed attacks; loot splits by damage dealt so the youngest still gets paid.
 
-### The photo check — read `src/lib/vision.js` before touching
+### The photo check — two engines, one contract
 
-This was rewritten once because the first version answered the wrong question.
+`src/lib/ai.js` is the only thing the UI talks to. It decides which engine runs.
+
+**Engine 1 — Claude, via `server/worker.js` (primary).** When
+`settings.photoCheckUrl` is set, both photos are downscaled to 768px/q0.8 and
+POSTed to a Cloudflare Worker that calls the Messages API. It answers the
+checklist item by item, which is the whole reason for it — the local engine
+never could. Verdicts come back stamped `engine: 'claude'`.
+
+The Worker's system prompt exists because of one repeated failure: **judge the
+room, not the photograph.** Angle, crop, lighting and blur are never grounds to
+fail a kid. If a required thing is out of frame, say so; don't rule on it.
+
+**Engine 2 — on-device `src/lib/vision.js` (fallback).** Runs when no URL is
+configured, and whenever the service is unreachable or slow (25s timeout —
+`askService` returns null on *any* failure so a bad deploy can't block a child
+from submitting). ProofSheet treats `engine !== 'claude'` as local and says so.
+Deliberately a positive test: not every local return path labels itself.
+
+**The key lives in the Worker, never in the bundle** (`npx wrangler secret put
+ANTHROPIC_API_KEY`). Everything shipped to the browser is readable by anyone who
+loads the page. `wrangler.toml` intentionally contains no key.
+
+#### What the local engine actually does — read `vision.js` before touching
+
+It was rewritten once because the first version answered the wrong question, and
+it still isn't accurate enough on real rooms — that's why Claude is now primary.
 
 **It does not judge cleanliness.** It detects *things left out on surfaces* by
 comparing a submission against the parent's "finished" reference:
@@ -235,10 +260,11 @@ Two things it must never do again:
   retake. A photo that *looks* like "done" is someone who did the job well.
   Only an exact byte match counts as a re-upload.
 
-There is **no AI model and no API key**. Tier two ("Ask for extra help") posts to
-a server route that isn't connected yet; see `docs/photo-check-server.md`. **An
-API key must never enter this bundle** — everything shipped to the browser is
-readable by anyone who loads the page.
+Alignment is also reused live: `createAligner()` powers the auto-snap
+viewfinder. Two rules learned the hard way — cap per-pixel cost when scoring
+alignment (`ALIGN_CAP`), or a genuinely messy room can never lock; and let the
+readiness percentage reach exactly 100 at the lock distance, or it asymptotes in
+the high 90s and the user can never trigger the snap.
 
 ---
 
@@ -252,11 +278,13 @@ readable by anyone who loads the page.
    handicaps was proposed and not built. Worth doing.
 3. **`settings.parentUnlocked` persists across reloads.** A kid picking up an
    unlocked iPad has full parent access until someone taps Lock.
-4. **The photo check is validated only against synthetic scenes.** The bench
-   caught three real bugs, but a canvas has no shadows, reflections or depth.
+4. **The local photo check is validated only against synthetic scenes,** and
+   tested poorly in a real house. The bench caught three real bugs, but a canvas
+   has no shadows, reflections or depth. It is now a fallback, not the answer.
 5. **No automated tests.** Verification has been done by driving the live app.
-6. Checklists on chores are collected and shown to the reviewing parent, but
-   nothing machine-checks them. That's what tier two is for.
+6. **The Worker is unauthenticated.** Anyone with the URL can spend the family's
+   API credits. Fine for a URL that only lives on seven phones; if it leaks,
+   redeploy at a new name. A shared secret header would be the real fix.
 
 ---
 

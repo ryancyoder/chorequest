@@ -18,9 +18,67 @@
  */
 
 import { analysePair, describeRegions, countPhrase } from './vision.js'
+import { downscale } from './camera.js'
 
-/** Set by the app when a server route is configured. */
-export const REMOTE_ENDPOINT = '/api/check-photo'
+/**
+ * Photos are stored at up to 1080px, which is more than the model needs and
+ * more than anyone needs to pay for. 768 is plenty to see a mug on a worktop.
+ */
+const SEND_SIZE = 768
+const TIMEOUT_MS = 25000
+
+/**
+ * Ask the configured service. Returns null — rather than throwing — whenever it
+ * can't answer, so the caller can fall back to the on-device check instead of
+ * leaving a child staring at an error.
+ */
+async function askService({ endpoint, referencePhoto, submittedPhoto, title, checklist, mode }) {
+  if (!endpoint) return null
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+
+  try {
+    const [ref, sub] = await Promise.all([
+      downscale(referencePhoto, SEND_SIZE, 0.8),
+      downscale(submittedPhoto, SEND_SIZE, 0.8),
+    ])
+
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ referencePhoto: ref, submittedPhoto: sub, title, checklist, mode }),
+      signal: controller.signal,
+    })
+    if (!res.ok) return null
+
+    const v = await res.json()
+    if (!v || typeof v.pass !== 'boolean') return null
+
+    return {
+      pass: v.pass,
+      outcome: v.outcome || (v.pass ? 'clean' : 'cluttered'),
+      score: typeof v.confidence === 'number' ? v.confidence : null,
+      headline: v.headline,
+      detail: v.detail,
+      findings: (v.findings || []).map((f) => ({
+        region: f.where || 'the photo',
+        what: f.what,
+        areaPct: 0,
+      })),
+      checklistResults: v.checklistResults || [],
+      checklist,
+      signals: [],
+      canEscalate: false,
+      engine: 'claude',
+      usage: v.usage || null,
+    }
+  } catch {
+    return null   // aborted, offline, CORS, bad JSON — all the same to the caller
+  } finally {
+    clearTimeout(timer)
+  }
+}
 
 /**
  * Verdict bands, as % of the frame taken up by things that don't match.
@@ -51,8 +109,22 @@ const BANDS = {
  * "this is what finished looks like" reference.
  */
 export async function checkCompletionPhoto({
-  referencePhoto, submittedPhoto, title = 'this job', checklist = [], sensitivity = 'normal',
+  referencePhoto, submittedPhoto, title = 'this job', checklist = [],
+  sensitivity = 'normal', endpoint = null,
 }) {
+  /*
+   * When a service is configured it does the judging, full stop. The on-device
+   * check is kept only as a safety net for no signal or a worker that's down —
+   * it proved too easily fooled by angle and lighting on real photographs to be
+   * trusted with the verdict.
+   */
+  if (endpoint && referencePhoto && submittedPhoto) {
+    const remote = await askService({
+      endpoint, referencePhoto, submittedPhoto, title, checklist, mode: 'chore',
+    })
+    if (remote) return remote
+  }
+
   if (!referencePhoto) {
     return {
       pass: true, outcome: 'unsure', score: null, skipped: true,
@@ -84,7 +156,7 @@ export async function checkCompletionPhoto({
       pass: false, outcome: 'identical', score: 0,
       headline: 'That looks like the example photo',
       detail: 'This is essentially the same image as the reference. Take a fresh photo of the real thing.',
-      signals, findings: [], checklist, canEscalate: false,
+      signals, findings: [], checklist, canEscalate: false, engine: 'local',
     }
   }
 
@@ -98,7 +170,7 @@ export async function checkCompletionPhoto({
       detail: lighting
         ? 'The two photos are lit so differently that nothing useful can be compared. Try again in similar light, or send it to a parent as is.'
         : "This doesn't line up with the reference photo at all. Try again from roughly where the example was taken.",
-      signals, findings: [], checklist, canEscalate: true, diag,
+      signals, findings: [], checklist, canEscalate: true, diag, engine: 'local',
     }
   }
 
@@ -124,7 +196,7 @@ export async function checkCompletionPhoto({
       headline: 'Nothing left out',
       detail: 'Surfaces match the finished photo — nothing sitting out that shouldn\'t be. Sent to a parent for the final OK.',
       // Below the clean bar, whatever turned up is noise, so don't parade it.
-      signals, findings: [], checklist, canEscalate: true, diag,
+      signals, findings: [], checklist, canEscalate: true, diag, engine: 'local',
     }
   }
 
@@ -133,7 +205,7 @@ export async function checkCompletionPhoto({
       pass: false, outcome: 'cluttered', score,
       headline: `${countPhrase(found.length)} still out`,
       detail: `There's something on ${describeRegions(found)} that isn't in the finished photo. Put it away and shoot it again from the same spot.`,
-      signals, findings: found, checklist, canEscalate: true, diag,
+      signals, findings: found, checklist, canEscalate: true, diag, engine: 'local',
     }
   }
 
@@ -144,7 +216,7 @@ export async function checkCompletionPhoto({
     detail: found.length
       ? `Nearly there. There's a little something around ${describeRegions(found, 1)}, so a parent should be the judge.`
       : 'Close to the finished photo. A parent should take the final look.',
-    signals, findings: found, checklist, canEscalate: true, diag,
+    signals, findings: found, checklist, canEscalate: true, diag, engine: 'local',
   }
 }
 
@@ -152,7 +224,17 @@ export async function checkCompletionPhoto({
  * Landmine defusal runs the same machinery backwards: here the good outcome is
  * that stuff has been REMOVED since the mess photo was taken.
  */
-export async function checkDefusePhoto({ messPhoto, defusePhoto, title = 'this mess', sensitivity = 'normal' }) {
+export async function checkDefusePhoto({
+  messPhoto, defusePhoto, title = 'this mess', sensitivity = 'normal', endpoint = null,
+}) {
+  if (endpoint && messPhoto && defusePhoto) {
+    const remote = await askService({
+      endpoint, referencePhoto: messPhoto, submittedPhoto: defusePhoto,
+      title, checklist: [], mode: 'defuse',
+    })
+    if (remote) return remote
+  }
+
   if (!messPhoto) {
     return {
       pass: true, outcome: 'unsure', score: null, skipped: true,
@@ -176,7 +258,7 @@ export async function checkDefusePhoto({ messPhoto, defusePhoto, title = 'this m
       pass: false, outcome: 'identical', score: 0,
       headline: 'That is the same mess',
       detail: 'Nothing has changed since the photo that armed this. Bold. Clean it for real and try again.',
-      signals, findings: [], checklist: [], canEscalate: false,
+      signals, findings: [], checklist: [], canEscalate: false, engine: 'local',
     }
   }
 
@@ -185,7 +267,7 @@ export async function checkDefusePhoto({ messPhoto, defusePhoto, title = 'this m
       pass: true, outcome: 'wrong-place', score: null,
       headline: 'Different spot entirely',
       detail: "This doesn't line up with the crime scene, so it can't be compared. Flagged for a parent to look at.",
-      signals, findings: [], checklist: [], canEscalate: true,
+      signals, findings: [], checklist: [], canEscalate: true, engine: 'local',
     }
   }
 
@@ -195,7 +277,7 @@ export async function checkDefusePhoto({ messPhoto, defusePhoto, title = 'this m
       pass: true, outcome: 'clean', score: Math.min(100, Math.round(a.changes.areaPct * 14)),
       headline: 'That got cleared up',
       detail: `Plenty has changed around ${describeRegions(a.changes.blobs)}. Sent to a parent to confirm and release the pot.`,
-      signals, findings: a.changes.blobs, checklist: [], canEscalate: false,
+      signals, findings: a.changes.blobs, checklist: [], canEscalate: false, engine: 'local', engine: 'local',
     }
   }
 
@@ -203,7 +285,7 @@ export async function checkDefusePhoto({ messPhoto, defusePhoto, title = 'this m
     pass: false, outcome: 'cluttered', score: Math.round(a.changes.areaPct * 14),
     headline: 'Not much has moved',
     detail: 'Barely anything has changed since the mine was armed. Clear it properly, then shoot the same spot again.',
-    signals, findings: a.changes.blobs, checklist: [], canEscalate: true,
+    signals, findings: a.changes.blobs, checklist: [], canEscalate: true, engine: 'local',
   }
 }
 
